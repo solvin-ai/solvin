@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model agent_roles {
+  id                       Int     @id @default(autoincrement())
+  agent_role               String  @unique(map: "sqlite_autoindex_agent_roles_1")
+  agent_description        String? @default("")
+  allowed_tools            String?
+  default_developer_prompt String? @default("")
+  default_user_prompt      String? @default("")
+  model_id                 Int?
+  reasoning_level          String? @default("medium")
+  tool_choice              String? @default("auto")
+}
+
+model model_providers {
+  id            Int      @id @default(autoincrement())
+  provider_name String   @unique(map: "sqlite_autoindex_model_providers_1")
+  extra_info    String?  @default("")
+  display_name  String   @default("")
+  models        models[]
+}
+
+model models {
+  id                 Int             @id @default(autoincrement())
+  provider_id        Int
+  model_name         String
+  extra_info         String?         @default("")
+  supports_reasoning Int             @default(1)
+  model_providers    model_providers @relation(fields: [provider_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([provider_id, model_name], map: "sqlite_autoindex_models_1")
+}

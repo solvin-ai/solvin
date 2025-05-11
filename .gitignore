@@ -1,0 +1,15 @@
+agentic/env/
+agentic/data/
+agentic/state/
+agentic/sandbox/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.bak
+agentic/frontend/node_modules/
+agentic/frontend/.next
+agentic/frontend/*.sqlite
+agentic/frontend/package-lock.json
+website/package-lock.json
+website/node_modules/

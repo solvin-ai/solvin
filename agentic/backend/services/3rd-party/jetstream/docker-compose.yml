@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  nats:
+    image: nats:2.11.3-alpine3.21                   # Pin to a version! (Update as appropriate)
+    container_name: nats-server
+    ports:
+      - "4222:4222"    # Client connections
+      - "8222:8222"    # HTTP monitoring/metrics
+      - "6222:6222"    # Clustering
+    command:
+      - "-js"                      # Enable JetStream
+      - "-m"
+      - "8222"                     # Monitoring port (redundant here since in config, but OK)
+      - "-c"
+      - "/etc/nats/nats-server.conf"
+    volumes:
+      - nats-data:/data            # Persistent JetStream data
+      - ./nats-server.conf:/etc/nats/nats-server.conf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+
+volumes:
+  nats-data:
+    driver: local

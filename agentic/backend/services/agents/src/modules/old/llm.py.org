@@ -1,0 +1,136 @@
+# modules/llm.py
+
+from pprint import pformat
+import openai
+
+from shared.logger import logger
+logger = logger
+from shared.client_tools import ToolsClient
+
+from modules.turns_outbound import build_api_payload
+from modules.turns_inbound import parse_api_response
+from modules.agent_manager import get_agent_tools
+from modules.turns_list import get_turns_list
+
+# Create the tools client. Uses environment/default via client_tools.py.
+tools_client = ToolsClient()
+
+client = openai
+
+def get_agent_registry(agent_role):
+    """
+    Retrieves a filtered tools registry for the specified agent type from the tools service.
+    Returns:
+      dict: Registry schema for only the allowed tools.
+    """
+    allowed_tools = get_agent_tools(agent_role)
+    logger.debug("Allowed tools for agent '%s': %s", agent_role, allowed_tools)
+    if not allowed_tools:
+        logger.debug("No allowed tools for this agent type.")
+        return {}
+
+    # Query tools service for meta+schema for the agent's allowed tools
+    try:
+        bulk = tools_client.tools_info(tool_names=list(allowed_tools), meta=True, schema=True)
+    except Exception as e:
+        logger.error(f"Failed to fetch tool registry from tools service: {e}")
+        raise
+
+    # Only include non-null found tools
+    registry = {k: v for k, v in bulk.items() if v is not None}
+    logger.debug("Fetched agent registry for type '%s': %s", agent_role, registry)
+    return registry
+
+def get_assistant_response(model, reasoning_effort, agent_role):
+    """
+    Constructs the API payload from the global conversation history using the agent-specific tools
+    registry (fetched from tools service), calls the LLM API, and processes the raw response into our format.
+    """
+    # Obtain allowed tools metadata from the service
+    unified_registry = get_agent_registry(agent_role)
+    payload = build_api_payload()
+    messages = payload["messages"]
+
+    # Build OpenAI tools metadata list from registry
+    tools_metadata = []
+    for tool_name, tool_obj in unified_registry.items():
+        func_def = {
+            "name": tool_name,
+            "description": tool_obj.get("description", ""),
+            "parameters": tool_obj.get("schema", {})  # default to empty object
+        }
+        tools_metadata.append({
+            "name": tool_name,
+            "description": tool_obj.get("description", ""),
+            "type": "function",
+            "function": func_def,
+            "parameters": tool_obj.get("schema", {})
+        })
+
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools_metadata,  # From tools service
+            tool_choice="required",
+            store=False,
+            reasoning_effort=reasoning_effort,
+            response_format={"type": "json_object"}
+        )
+    except openai.BadRequestError as e:
+        logger.error("BadRequestError encountered during API call: %s", str(e))
+        try:
+            turns = get_turns_list()
+            def serialize_for_pprint(item, visited=None):
+                if visited is None:
+                    visited = set()
+                try:
+                    obj_id = id(item)
+                except Exception:
+                    obj_id = None
+                if obj_id is not None and obj_id in visited:
+                    return f"<Circular reference to {type(item).__name__}>"
+                if obj_id is not None:
+                    visited.add(obj_id)
+                if isinstance(item, list):
+                    return [serialize_for_pprint(sub, visited) for sub in item]
+                if isinstance(item, dict):
+                    return {k: serialize_for_pprint(v, visited) for k, v in item.items()}
+                if type(item).__name__ == "UnifiedTurn":
+                    turn_meta = getattr(item, "turn_meta", "<MISSING>")
+                    tool_meta = getattr(item, "tool_meta", "<MISSING>")
+                    messages = getattr(item, "messages", "<MISSING>")
+                    return {"__UnifiedTurn__": {
+                        "turn_meta": serialize_for_pprint(turn_meta, visited),
+                        "tool_meta": serialize_for_pprint(tool_meta, visited),
+                        "messages": serialize_for_pprint(messages, visited)
+                    }}
+                if hasattr(item, "__dict__"):
+                    return serialize_for_pprint(item.__dict__, visited)
+                return item
+
+            dumped_turns = pformat(serialize_for_pprint(turns), indent=2)
+            logger.error("Complete recursive turns list dump:\n%s", dumped_turns)
+        except Exception as dump_err:
+            logger.error("Error dumping turns list: %s", str(dump_err))
+        raise
+
+    raw_message = completion.choices[0].message.to_dict()
+    return parse_api_response({"assistant": raw_message})
+
+def process_turn(config_dict, agent_role):
+    """
+    Extracts configuration details and invokes get_assistant_response using the agent-specific tools registry.
+    """
+    model = config_dict.get("LLM_MODEL")
+    reasoning_effort = config_dict.get("LLM_REASONING_LEVEL", "high")
+    return get_assistant_response(model, reasoning_effort, agent_role)
+
+if __name__ == "__main__":
+    test_config = {"LLM_MODEL": "gpt-4", "LLM_REASONING_LEVEL": "high"}
+    test_agent_role = "root"
+    try:
+        response = process_turn(test_config, test_agent_role)
+        logger.info("Assistant response: %s", pformat(response))
+    except Exception as e:
+        logger.error("Error during API call: %s", str(e))

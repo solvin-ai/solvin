@@ -1,0 +1,23 @@
+# For config
+pyyaml==6.0.2
+requests==2.32.3
+omegaconf==2.3.0
+
+#openai==1.68.2
+#prompt_toolkit==3.0.50
+#semgrep==1.114.0
+#marshmallow==3.26.1
+#rich==13.5.2
+#javalang==0.13.0
+#typer==0.15.2
+
+# For logs:
+python-json-logger==3.3.0
+
+# For services:
+fastapi==0.115.12
+uvicorn==0.34.1
+
+# For tests:
+pytest==8.3.5
+httpx==0.28.1

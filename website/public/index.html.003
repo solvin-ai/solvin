@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solvin.ai - Autonomous AI Engineer</title>
+    <meta name="description" content="Solvin.ai: Experience the future with our autonomous AI agentic platform for advanced code generation. Build faster, smarter, and better.">
+
+    <!-- Favicon (Replace with actual favicon links) -->
+    <link rel="icon" href="https://via.placeholder.com/32x32/00D1FF/050816?text=S" type="image/png"> <!-- Placeholder Favicon -->
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    <!-- Link to CSS -->
+    <link rel="stylesheet" href="css/style.css">
+
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="main-header">
+        <div class="container">
+            <a href="#home" class="logo">Solvin<span>.ai</span></a>
+            <nav class="main-nav">
+                <ul>
+                    <li><a href="#features" class="active">Features</a></li>
+                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#use-cases">Use Cases</a></li>
+                    <li><a href="#">Docs</a></li>
+                    <li><a href="#early-access">Early Access</a></li>
+                </ul>
+            </nav>
+            <div class="header-cta">
+                <a href="#" class="btn btn-secondary">Sign In</a>
+                <a href="#early-access" class="btn btn-primary">Request Access</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Hero Section -->
+        <section class="hero" id="home">
+            <div class="container">
+                 <!-- Image on the left -->
+                 <div class="hero-image-container">
+                     <img src="/images/robot.jpeg"
+                          alt="Stylized representation of AI agent working with code" class="hero-image">
+                    <!-- Image Source: Pexels - Consider downloading and hosting locally for production -->
+                 </div>
+
+                 <!-- Text content on the right -->
+                 <div class="hero-content">
+                    <h1>The Autonomous AI Engineer</h1>
+                    <p>Solvin.ai leverages a sophisticated agentic operating system to understand complex requirements, generate production-ready code, debug, and accelerate your entire software development lifecycle.</p>
+                    <div class="hero-cta">
+                        <a href="#early-access" class="btn btn-primary">Request Early Access Now</a>
+                        <a href="#features" class="btn btn-secondary">Explore Features</a>
+                    </div>
+                 </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="features" id="features">
+            <div class="container">
+                <div class="section-title">
+                    <h2>Beyond Completion: True Agentic Development</h2>
+                    <p>Solvin.ai isn't just writing lines of code; it's architecting solutions, reasoning about complexity, and acting as an intelligent development partner.</p>
+                </div>
+                <div class="features-grid">
+                    <!-- Feature 1 -->
+                    <div class="feature-item">
+                        <div class="feature-icon-wrapper"><i class="fas fa-brain"></i></div>
+                        <h3>Advanced Agentic Reasoning</h3>
+                        <p>Understands high-level goals, project context, and nuances in natural language to generate coherent, functional software components.</p>
+                    </div>
+                    <!-- Feature 2 -->
+                    <div class="feature-item">
+                         <div class="feature-icon-wrapper"><i class="fas fa-layer-group"></i></div>
+                        <h3>Full Stack Generation</h3>
+                        <p>Capable of building entire features, including frontend UI (React, Vue, etc.), backend logic (Python, Node, Java, Go), and database interactions.</p>
+                    </div>
+                     <!-- Feature 3 -->
+                    <div class="feature-item">
+                         <div class="feature-icon-wrapper"><i class="fas fa-bug-slash"></i></div>
+                        <h3>Autonomous Debugging & Testing</h3>
+                        <p>Proactively identifies potential issues, suggests fixes, and can even generate basic test cases to ensure code robustness.</p>
+                    </div>
+                    <!-- Feature 4 -->
+                    <div class="feature-item">
+                        <div class="feature-icon-wrapper"><i class="fas fa-sync-alt"></i></div>
+                        <h3>Iterative Refinement Loop</h3>
+                        <p>Engage in dialogue. Provide feedback, clarify requirements, and watch Solvin.ai intelligently adapt and improve the generated codebase.</p>
+                    </div>
+                    <!-- Feature 5 -->
+                     <div class="feature-item">
+                         <div class="feature-icon-wrapper"><i class="fas fa-book-open-reader"></i></div>
+                        <h3>Context-Aware Learning</h3>
+                        <p>Learns from your existing codebase, documentation, and feedback to better align with your project's style and conventions over time.</p>
+                    </div>
+                    <!-- Feature 6 -->
+                     <div class="feature-item">
+                         <div class="feature-icon-wrapper"><i class="fas fa-bolt"></i></div>
+                        <h3>Unprecedented Velocity</h3>
+                        <p>Dramatically reduce time spent on boilerplate, repetitive tasks, and initial implementations. Focus your team on innovation and complex challenges.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section class="how-it-works" id="how-it-works">
+            <div class="container">
+                <div class="section-title">
+                    <h2>From Intent to Intelligent Implementation</h2>
+                    <p>Our streamlined process transforms your requirements into working code with minimal friction, powered by autonomous AI.</p>
+                </div>
+                <div class="how-it-works-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <h3>Define & Describe</h3>
+                        <p>Articulate your task using natural language, technical specs, user stories, or even point to relevant designs or documents.</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <h3>Solvin Reasons & Builds</h3>
+                        <p>The autonomous agent analyzes the input, plans the execution steps, generates code, and handles dependencies.</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <h3>Review, Refine & Deploy</h3>
+                        <p>Collaborate with Solvin.ai to review the output, provide feedback for iterations, and integrate the polished code.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Use Cases Section -->
+        <section class="use-cases" id="use-cases">
+            <div class="container">
+                 <div class="section-title">
+                    <h2>Empowering Developers Across the Spectrum</h2>
+                    <p>Solvin.ai is a versatile powerhouse, accelerating development for a wide array of applications and tasks.</p>
+                </div>
+                <div class="use-cases-grid">
+                    <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-rocket use-case-icon"></i></div>
+                       <div class="use-case-content">
+                            <h3>Rapid Feature Development</h3>
+                            <p>Build and iterate on new product features, APIs, and services at lightning speed, from concept to functional code.</p>
+                        </div>
+                    </div>
+                     <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-code-branch use-case-icon"></i></div>
+                        <div class="use-case-content">
+                            <h3>Complex Logic Implementation</h3>
+                            <p>Tackle intricate algorithms, business rules, or state management challenges with AI assistance for accuracy and efficiency.</p>
+                        </div>
+                    </div>
+                    <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-tools use-case-icon"></i></div>
+                       <div class="use-case-content">
+                            <h3>Internal Tools & Automation</h3>
+                            <p>Quickly generate scripts, CLIs, admin panels, or automation workflows to streamline internal processes.</p>
+                        </div>
+                    </div>
+                    <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-cloud use-case-icon"></i></div>
+                        <div class="use-case-content">
+                            <h3>Cloud Infrastructure Snippets</h3>
+                            <p>Assist in generating configuration code (e.g., Terraform, CloudFormation snippets) based on descriptions.</p>
+                        </div>
+                    </div>
+                     <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-mobile-screen-button use-case-icon"></i></div>
+                        <div class="use-case-content">
+                            <h3>Cross-Platform Components</h3>
+                            <p>Generate foundational code for components intended for use across web, mobile, or desktop platforms.</p>
+                        </div>
+                    </div>
+                     <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-graduation-cap use-case-icon"></i></div>
+                        <div class="use-case-content">
+                            <h3>Learning & Exploration</h3>
+                            <p>Understand how to implement specific patterns or use new libraries by asking Solvin.ai to generate examples.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Testimonials Section (Placeholder Content) -->
+        <section class="testimonials" id="testimonials">
+            <div class="container">
+                 <div class="section-title">
+                    <h2>Trusted by Forward-Thinking Engineering Teams</h2>
+                    <p>Hear how pioneers are leveraging Solvin.ai to redefine development workflows and achieve remarkable results.</p>
+                </div>
+                <div class="testimonial-slider">
+                   <div class="testimonial-content">
+                        <p class="testimonial-quote">"Solvin.ai is easily the biggest leap in developer productivity I've seen in my career. It doesn't just write code, it understands intent. We're shipping complex features faster than ever before, and the code quality is consistently high."</p>
+                        <p class="testimonial-author">Alex Chen <span>CTO, QuantumLeap Software</span></p>
+                    </div>
+                    <!-- Add more testimonials maybe with JS later for a carousel -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Call to Action Section -->
+        <section class="cta-section" id="early-access">
+            <div class="container">
+                <h2>Step into the Future of Software Creation.</h2>
+                <p>Join our exclusive early access program and be among the first to harness the power of Solvin.ai's autonomous agentic coding platform. Limited spots available.</p>
+                <a href="#" class="btn">Request Your Early Access Invite</a>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-about">
+                    <a href="#home" class="logo footer-logo">Solvin<span>.ai</span></a>
+                     <p>The Autonomous AI Engineer for Code Generation. Accelerating software development with intelligent automation.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4>Product</h4>
+                        <ul>
+                            <li><a href="#features">Features</a></li>
+                            <li><a href="#how-it-works">How It Works</a></li>
+                            <li><a href="#use-cases">Use Cases</a></li>
+                            <li><a href="#">Integrations</a></li>
+                             <li><a href="#early-access">Early Access</a></li>
+                        </ul>
+                    </div>
+                     <div class="footer-column">
+                        <h4>Resources</h4>
+                        <ul>
+                            <li><a href="#">Documentation</a></li>
+                            <li><a href="#">Blog</a></li>
+                            <li><a href="#">Case Studies</a></li>
+                            <li><a href="#">Security</a></li>
+                            <li><a href="#">Support</a></li>
+                        </ul>
+                    </div>
+                     <div class="footer-column">
+                        <h4>Company</h4>
+                        <ul>
+                            <li><a href="#">About Us</a></li>
+                            <li><a href="#">Careers</a></li>
+                            <li><a href="#">Contact Us</a></li>
+                            <li><a href="#">Press</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div>
+            <div class="footer-bottom">
+                 <p>© <span id="current-year"></span> Solvin AI Corporation. All rights reserved.</p>
+                 <div class="footer-legal-links">
+                      <a href="#">Terms of Service</a> | <a href="#">Privacy Policy</a>
+                 </div>
+                <div class="footer-social">
+                    <a href="#" aria-label="Twitter / X"><i class="fab fa-twitter"></i></a>
+                    <a href="#" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                    <a href="#" aria-label="GitHub"><i class="fab fa-github"></i></a>
+                    <a href="#" aria-label="Discord"><i class="fab fa-discord"></i></a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Optional JS for simple dynamic year -->
+    <script>
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+    </script>
+    <!-- Add more JS later for animations, carousels etc. -->
+    <!-- <script src="script.js"></script> -->
+
+</body>
+</html>

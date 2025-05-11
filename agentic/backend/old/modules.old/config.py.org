@@ -1,0 +1,126 @@
+# modules/config.py
+
+"""
+Configuration loader and singleton for the project using YAML format.
+
+This module reads configuration from a YAML file (by default, ".config.yml")
+and applies environment variable overrides. It also sets default values for
+various configuration keys, including host directories, which are based on the
+project’s root directory (assumed to be the parent of the "modules" directory).
+Required keys (like API_TOKEN_OPENAI, LLM_MODEL and TASK_NAME) are validated here so that
+main.py and other modules do not need to repeat this logic.
+
+Usage:
+    from modules.config import config
+    api_key = config.get("API_TOKEN_OPENAI")
+"""
+
+import os
+import yaml
+
+def read_config_from_file(config_path: str = ".config.yml") -> dict:
+    if not os.path.exists(config_path):
+        return {}
+    with open(config_path, "r") as config_file:
+        config = yaml.safe_load(config_file)
+        if not isinstance(config, dict):
+            config = {}
+    return config
+
+class ConfigSingleton:
+    def __init__(self, config_path: str = ".config.yml"):
+        # Read configuration from file.
+        self._config = read_config_from_file(config_path)
+        # Perform one-time initialization: set defaults, incorporate ENV overrides, and validate.
+        self.initialize()
+    
+    def initialize(self):
+        """
+        Incorporate environment variable overrides, set default values for keys not set,
+        and validate the configuration.
+        """
+        # Derive the project root. Because this file is in <project>/modules,
+        # we use the parent directory of the modules folder.
+        script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        self._config.setdefault("SCRIPT_DIR", script_dir)
+        
+        # Set up the new centralized data directory structure.
+        data_dir = os.path.join(script_dir, "data")
+        self._config.setdefault("DATA_DIR", data_dir)
+        self._config.setdefault("HOST_REPOS", os.path.join(data_dir, "repos"))
+        self._config.setdefault("HOST_LOGS", os.path.join(data_dir, "logs"))
+        self._config.setdefault("HOST_THOUGHTS", os.path.join(data_dir, "thoughts"))
+        self._config.setdefault("HOST_REQUESTS", os.path.join(data_dir, "requests"))
+        
+        # Other defaults for configurations.
+        self._config.setdefault("HOST_TOOLS", os.path.join(script_dir, "tools"))
+        self._config.setdefault("HOST_CONFIG", os.path.join(script_dir, "config"))
+        self._config.setdefault("MAX_ITERATIONS", "0")        # 0 means unlimited iterations.
+        self._config.setdefault("RUN_TOOLS_IN_CONTAINER", "False")  # as string to allow ENV override.
+        self._config.setdefault("TOOLS_DOCKER_IMAGE", "tools_container")
+        
+        # List of keys that can be overridden from the environment.
+        keys_to_override = [
+            "API_TOKEN_OPENAI",
+            "API_TOKEN_GITHUB",
+            "LLM_MODEL",
+            "GITHUB_FEATURE_BRANCH",
+            "LLM_USER_PROMPT",
+            "LLM_SYSTEM_PROMPT",
+            "SCRIPT_DIR",
+            "DATA_DIR",
+            "HOST_REPOS",
+            "HOST_TOOLS",
+            "HOST_CONFIG",
+            "HOST_LOGS",
+            "HOST_THOUGHTS",
+            "HOST_REQUESTS",
+            "TASK_NAME"
+        ]
+        for key in keys_to_override:
+            env_val = os.environ.get(key)
+            if env_val is not None:
+                self._config[key] = env_val
+
+        # Validate required keys.
+        required_keys = ["API_TOKEN_OPENAI", "LLM_MODEL", "TASK_NAME"]
+        missing = [key for key in required_keys if not self._config.get(key)]
+        if missing:
+            raise ValueError("Missing required configuration keys: " + ", ".join(missing))
+    
+    def get(self, key, default=None):
+        """Return the value for key if key is in the config dictionary, else default."""
+        return self._config.get(key, default)
+
+    def set(self, key, value):
+        """Set the value for key in the config dictionary."""
+        self._config[key] = value
+
+    # Dictionary-like interface.
+    def __getitem__(self, key):
+        return self._config[key]
+
+    def __setitem__(self, key, value):
+        self._config[key] = value
+
+    def __contains__(self, key):
+        return key in self._config
+
+    def __iter__(self):
+        return iter(self._config)
+
+    def items(self):
+        return self._config.items()
+
+    def keys(self):
+        return self._config.keys()
+
+    def values(self):
+        return self._config.values()
+
+    def as_dict(self):
+        """Return the underlying configuration dictionary."""
+        return self._config
+
+# Global singleton instance.
+config = ConfigSingleton()

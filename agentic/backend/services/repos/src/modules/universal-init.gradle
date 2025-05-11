@@ -1,0 +1,206 @@
+/*
+  Universal Gradle Init Script for Explicit JDK Version Detection
+
+  This init script defers its actions until after the build is finished (via buildFinished)
+  so that all projects are available. It then performs the following steps:
+
+    1. Reads the Gradle wrapper version from gradle/wrapper/gradle-wrapper.properties.
+    2. For each project in the build:
+         • For subprojects (project paths other than ":"), it uses an advanced detection routine
+           that checks the Java toolchain, JavaCompile tasks (sourceCompatibility), project properties
+           (sourceCompatibility/targetCompatibility), and Kotlin compile tasks.
+         • For the root project (project path ":"), if subprojects exist then the script runs a conventional
+           detection routine (which checks whether sourceCompatibility or targetCompatibility is explicitly set).
+           If that conventional result equals the default running JDK version (as given by JavaVersion.current()),
+           the root project is ignored. Otherwise, its conventionally set value is used.
+         • If there are no subprojects, then the advanced detection result is used for the root.
+    3. Only projects with an explicit, non‑"not specified" JDK version are included in the final output.
+    4. The final JSON output contains two keys:
+         • "jdkVersions": an array of objects having "project" and "jdkVersion"
+         • "gradle": an object with "gradleRequiredVersion" and "runningGradleVersion"
+
+  Usage:
+    From your repository root, run:
+       gradle --init-script modules/universal‑init.gradle tasks
+*/
+
+import groovy.json.JsonOutput
+import org.gradle.api.plugins.JavaPluginExtension
+import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.api.JavaVersion
+
+// --------------- Defensive Gradle version check -----------------
+def versionStr = gradle.gradleVersion
+def versionNum = versionStr.tokenize('.').collect { it as int }
+def currentMajor = versionNum[0]
+def currentMinor = versionNum.size() > 1 ? versionNum[1] : 0
+
+if (currentMajor < 5) {
+    println "[universal-init.gradle] ERROR: This script requires Gradle 5.0+ (found $versionStr)."
+    println JsonOutput.prettyPrint(JsonOutput.toJson([
+        error: "Gradle $versionStr not supported; requires 5.0+."
+    ]))
+    return
+}
+if (currentMajor < 7) {
+    println "[universal-init.gradle] WARNING: Running on Gradle $versionStr. Detection may be limited."
+}
+if (currentMajor >= 9) {
+    println "[universal-init.gradle] WARNING: This script is not tested with Gradle $versionStr. Proceed with caution."
+}
+// ------------- End defensive Gradle version check ---------------
+
+gradle.buildFinished { buildResult ->
+
+    // 1. Read the Gradle wrapper version from gradle-wrapper.properties.
+    def gradleWrapperVersion = "n/a"
+    def wrapperFile = new File(rootProject.projectDir, "gradle/wrapper/gradle-wrapper.properties")
+    if (wrapperFile.exists()) {
+        def properties = new Properties()
+        wrapperFile.withInputStream { stream ->
+            properties.load(stream)
+        }
+        def distributionUrl = properties.getProperty("distributionUrl")
+        if (distributionUrl) {
+            def matcher = (distributionUrl =~ /gradle-([\d.]+)-/)
+            if (matcher.find()) {
+                gradleWrapperVersion = matcher.group(1)
+            }
+        }
+    }
+
+    // 2. Identify if there are any subprojects (projects whose path is not ":").
+    def subprojects = rootProject.allprojects.findAll { it.path != ":" }
+    def hasSubprojects = subprojects.size() > 0
+
+    // --- Legacy detection (safe for old Gradle) ---
+    def legacyDetectJdk = { project ->
+        def jdk = "not specified"
+        def explicit = false
+        try {
+            if (project.hasProperty("sourceCompatibility") && project.sourceCompatibility) {
+                jdk = project.sourceCompatibility.toString()
+                explicit = true
+            } else if (project.hasProperty("targetCompatibility") && project.targetCompatibility) {
+                jdk = project.targetCompatibility.toString()
+                explicit = true
+            }
+        } catch(Exception e) {}
+        return [version: jdk, explicit: explicit]
+    }
+
+    // 3a. Advanced detection: Checks toolchain, JavaCompile, properties, and Kotlin settings.
+    def advancedDetectRequiredJdk = { project ->
+        def requiredJdk = null
+        def explicit = false
+
+        // a) Try the Java toolchain via JavaPluginExtension.
+        if (currentMajor >= 6) {
+            def javaExt = project.extensions.findByType(JavaPluginExtension)
+            if (javaExt != null) {
+                try {
+                    def toolchain = javaExt.toolchain
+                    if (toolchain != null && toolchain.languageVersion?.isPresent()) {
+                        requiredJdk = toolchain.languageVersion.get().asInt().toString()
+                        explicit = true
+                    }
+                } catch(Exception e) {
+                    // Ignore exceptions.
+                }
+            }
+        }
+
+        // b) Check JavaCompile tasks for sourceCompatibility.
+        if (!requiredJdk) {
+            try {
+                project.tasks.withType(JavaCompile).each { task ->
+                    try {
+                        if (task.sourceCompatibility) {
+                            requiredJdk = task.sourceCompatibility.toString()
+                            explicit = true
+                        }
+                    } catch(Exception e) {
+                        // Ignore task-specific errors.
+                    }
+                }
+            } catch(Exception e) {}
+        }
+
+        // c) Check project-level properties: sourceCompatibility or targetCompatibility.
+        if (!requiredJdk && project.hasProperty("sourceCompatibility") && project.sourceCompatibility) {
+            requiredJdk = project.sourceCompatibility.toString()
+            explicit = true
+        }
+        if (!requiredJdk && project.hasProperty("targetCompatibility") && project.targetCompatibility) {
+            requiredJdk = project.targetCompatibility.toString()
+            explicit = true
+        }
+
+        // d) Check for Kotlin compile tasks with kotlinOptions.jvmTarget.
+        try {
+            project.tasks.findAll { t ->
+                t.hasProperty("kotlinOptions") && t.kotlinOptions?.jvmTarget
+            }.each { t ->
+                if (!requiredJdk && t.kotlinOptions?.jvmTarget) {
+                    requiredJdk = t.kotlinOptions.jvmTarget.toString()
+                    explicit = true
+                }
+            }
+        } catch(Exception e) {}
+
+        if (!requiredJdk) {
+            requiredJdk = "not specified"
+        }
+        return [version: requiredJdk, explicit: explicit]
+    }
+
+    // 4. Build the list of projects with an explicit JDK version.
+    def explicitJdkList = []
+    rootProject.allprojects.each { project ->
+        def result = null
+        if (project.path == ":") {
+            if (hasSubprojects) {
+                // For the root when subprojects exist, run both advanced and conventional detections.
+                def conventionalResult = legacyDetectJdk(project)
+                // Get the default running JDK version as reported by JavaVersion.current().
+                def defaultJdkVersion = JavaVersion.current().toString()
+                // If the conventional result is explicit and its version is different from the default,
+                // use it; otherwise ignore the root.
+                if (conventionalResult.explicit && conventionalResult.version != "not specified" &&
+                    conventionalResult.version != defaultJdkVersion) {
+                    result = conventionalResult
+                } else {
+                    result = null
+                }
+            } else {
+                // If there are no subprojects, use the advanced detection for the root.
+                result = (currentMajor < 6) ? legacyDetectJdk(project) : advancedDetectRequiredJdk(project)
+            }
+        } else {
+            // For subprojects, always use the advanced detection if >=6, else legacy
+            result = (currentMajor < 6) ? legacyDetectJdk(project) : advancedDetectRequiredJdk(project)
+        }
+
+        if (result != null && result.explicit && result.version != "not specified") {
+            explicitJdkList << [
+                project   : project.path,
+                jdkVersion: result.version
+            ]
+        }
+    }
+
+    // 5. Gather Gradle version information from the root project.
+    def gradleData = [
+        gradleRequiredVersion: gradleWrapperVersion,
+        runningGradleVersion : gradle.gradleVersion
+    ]
+
+    // 6. Build the final JSON object and print it.
+    def output = [
+        jdkVersions: explicitJdkList,
+        gradle     : gradleData
+    ]
+
+    def jsonOutput = JsonOutput.prettyPrint(JsonOutput.toJson(output))
+    println jsonOutput
+}

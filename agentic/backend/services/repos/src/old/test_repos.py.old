@@ -1,0 +1,195 @@
+# test_repos.py
+
+"""
+Tests for the repository admission service.
+Verifies health, adding repositories (including duplicate detection),
+listing, claiming, completion, priority ordering, deletion, and all blocking claims.
+
+Uses only real git URLs. Cleans up all repo directories after session (finalizer).
+"""
+
+import pytest
+import time
+import uuid
+import shutil
+from pathlib import Path
+
+from shared.client_repos import ReposClient
+from shared.config import config   # <-- ADD THIS LINE
+
+REPO_URL = "https://github.com/octocat/Hello-World.git"
+
+def unique_repo_name(base, parallel=False):
+    """Return base if no parallelization; else make a unique name (for CI runs)."""
+    if parallel:
+        return f"{base}_{uuid.uuid4().hex[:8]}"
+    return base
+
+@pytest.fixture
+def client():
+    return ReposClient()
+
+@pytest.fixture(autouse=True, scope="function")
+def cleanup_repos(client):
+    _remove_all_repos(client)
+    yield
+    _remove_all_repos(client)
+    # Aggressive: ensure ALL physical repo dirs are also removed every test
+    repo_root = Path(config["REPOS_DIR"])     # <-- USE CONFIG INSTEAD OF HARDCODED PATH
+    if repo_root.exists():
+        for entry in repo_root.iterdir():
+            if entry.is_dir():
+                shutil.rmtree(entry, ignore_errors=True)
+
+def _remove_all_repos(client):
+    """Best-effort: complete/delete all repos in backend."""
+    try:
+        repos = client.list_repos()
+    except Exception:
+        return
+    for repo in repos:
+        name = repo["repo_name"]
+        try:
+            client.complete_repo(name)
+        except Exception:
+            try:
+                client.claim_repo()
+                client.complete_repo(name)
+            except Exception:
+                pass  # Repo may be already deleted/claimed etc
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_all_repos_dir():
+    """At end of entire session, fully delete all test repos (incl orphans on disk)."""
+    yield
+    repo_root = Path(config["REPOS_DIR"])   # <-- USE CONFIG INSTEAD OF HARDCODED PATH
+    if repo_root.exists():
+        for entry in repo_root.iterdir():
+            if entry.is_dir():
+                shutil.rmtree(entry, ignore_errors=True)
+
+def test_health(client):
+    assert client.health()["status"] == "ok"
+
+def test_add_repo(client):
+    resp = client.add_repo(
+        repo_name="r1",
+        repo_owner="alice",
+        repo_team="teamA",
+        priority=5,
+        repo_url=REPO_URL
+    )
+    assert resp["message"] == "Repository admitted" or resp.get("metadata")
+    repo_names = [r["repo_name"] for r in client.list_repos()]
+    assert "r1" in repo_names
+
+def test_add_duplicate_repo(client):
+    client.add_repo("r1", "alice", "teamA", 5, REPO_URL)
+    with pytest.raises(Exception):
+        client.add_repo("r1", "bob", "teamB", 5, REPO_URL)
+
+def test_add_multiple_repos(client):
+    # Names r2, r3, r4 with real repo_url
+    for i in range(2, 5):
+        resp = client.add_repo(
+            repo_name=f"r{i}",
+            repo_owner="bob",
+            repo_team="teamB",
+            priority=2 + i,
+            repo_url=REPO_URL
+        )
+        assert resp["message"] == "Repository admitted" or resp.get("metadata")
+        all_repos = client.list_repos()
+        assert any(r["repo_name"] == f"r{i}" for r in all_repos)
+
+def test_list_repos(client):
+    names = [f"rr{i}" for i in range(1, 5)]
+    for name in names:
+        client.add_repo(name, "u", "t", 1, REPO_URL)
+    repo_names = [r["repo_name"] for r in client.list_repos()]
+    for name in names:
+        assert name in repo_names
+
+def test_claim_repo_and_check_status(client):
+    client.add_repo("r2", "alice", "teamA", 5, REPO_URL)
+    claim = client.claim_repo(ttl=120)
+    assert claim["repo_name"] == "r2"
+    assert claim.get("status") == "claimed"
+
+def test_claim_when_empty(client):
+    # Claim all possible repos
+    while True:
+        try:
+            client.claim_repo()
+        except Exception:
+            break
+    with pytest.raises(Exception):
+        client.claim_repo()
+
+def test_complete_repo(client):
+    client.add_repo("final", "eve", "teamC", 9, REPO_URL)
+    client.claim_repo()
+    resp = client.complete_repo("final")
+    assert "removed" in resp.get("message", "")
+
+def test_complete_nonexistent_or_unclaimed_repo(client):
+    with pytest.raises(Exception):
+        client.complete_repo("notexist")
+
+def test_priority_ordering(client):
+    client.add_repo("high", "zoe", "X", 100, REPO_URL)
+    client.add_repo("low", "mia", "Y", 1, REPO_URL)
+    first_claim = client.claim_repo()
+    assert first_claim["repo_name"] == "high"
+    second_claim = client.claim_repo()
+    assert second_claim["repo_name"] == "low"
+
+# --- Tests for repository deletion ---
+
+def test_delete_repo_with_db(client):
+    client.add_repo("deleter", "dave", "teamD", 5, REPO_URL)
+    resp = client.delete_repo("deleter", remove_db=True)
+    assert "Filesystem removal" in resp["message"]
+    repo_names = [r["repo_name"] for r in client.list_repos()]
+    assert "deleter" not in repo_names
+
+def test_delete_repo_filesystem_only(client):
+    client.add_repo("onlyfs", "dave", "teamD", 5, REPO_URL)
+    resp = client.delete_repo("onlyfs", remove_db=False)
+    assert "Filesystem removal" in resp["message"]
+    repo_names = [r["repo_name"] for r in client.list_repos()]
+    assert "onlyfs" in repo_names
+
+# --- Tests for /repos/claim_blocking ---
+
+def test_claim_blocking_returns_if_repo_immediately_available(client):
+    client.add_repo("blocknow", "foo", "bar", 10, REPO_URL)
+    t0 = time.time()
+    claim = client.claim_repo_blocking(timeout=4.0)
+    t1 = time.time()
+    assert claim["repo_name"] == "blocknow"
+    assert t1 - t0 < 2, "claim_blocking should not block when repo is available"
+
+def test_claim_blocking_waits_until_available(client):
+    import threading
+
+    def delayed_add_repo():
+        time.sleep(1.2)
+        client.add_repo("appear_later", "bob", "tim", 5, REPO_URL)
+
+    thread = threading.Thread(target=delayed_add_repo)
+    thread.start()
+
+    t0 = time.time()
+    claim = client.claim_repo_blocking(timeout=5.0)
+    t1 = time.time()
+    thread.join()
+    assert claim["repo_name"] == "appear_later"
+    assert 1.0 < (t1 - t0) < 4.1, f"Should block ~1.2s; actual: {t1-t0:.2f}s"
+
+def test_claim_blocking_times_out(client):
+    t0 = time.time()
+    with pytest.raises(Exception):
+        client.claim_repo_blocking(timeout=2.0)
+    t1 = time.time()
+    assert 1.6 < (t1 - t0) < 3.1, f"Should block ~2s; actual: {t1-t0:.2f}s"

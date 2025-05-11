@@ -1,0 +1,10 @@
+- display_name: ''
+  extra_info: ''
+  model_name: gpt-4.1
+  provider_name: OpenAI
+  supports_reasoning: false
+- display_name: ''
+  extra_info: ''
+  model_name: o4-mini
+  provider_name: OpenAI
+  supports_reasoning: true

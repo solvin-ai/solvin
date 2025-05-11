@@ -1,0 +1,5 @@
+- task_name: bug_fixes
+  task_prompt: |-
+    Fix the bugs in this repo.
+
+    START YOUR WORK NOW! 

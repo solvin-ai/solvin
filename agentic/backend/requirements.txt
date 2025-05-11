@@ -1,0 +1,5 @@
+#prompt_toolkit==3.0.50
+typer==0.15.2
+requests==2.32.3
+python-json-logger==3.3.0
+pyyaml==6.0.2

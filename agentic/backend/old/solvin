@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+# main.py
+
+"""
+Main entry point for our conversation pipeline.
+
+Responsibilities:
+  • Reads configuration from the central config singleton.
+  • Sets up logging, repository, and working directories.
+  • Loads agent state from the filesystem based on agent type and agent id.
+  • Validates allowed tools and sets up a dedicated sandbox.
+  • Initializes the global tools registry so that it can later be fetched—without being passed as a parameter.
+  • Delegates the conversation loop processing to turns_manager.py.
+  • Persists agent state back to disk on every turn.
+  • Delegates output table printing to llm.py.
+Only allowed keys (role, content, and approved tool_calls) are passed to external APIs.
+"""
+
+import os
+import sys
+from datetime import datetime
+
+# Configuration
+from modules.config import config
+
+# Logging and tracing.
+from modules.line_tracer import enable_tracing
+from modules.logs import logger
+
+# Repository and safety setup.
+from modules.tools_safety import set_sandbox_dir, create_sandbox
+from modules.git import clone_repo
+
+# Turn management.
+from modules.turns_manager import run_conversation_loop
+
+# Agent management.
+from modules.agent_manager import init_agent_manager
+
+# CLI handling (importing as a library, without creating circular dependencies)
+import modules.cli as cli_lib
+
+def setup_file_logging(repo_name, host_logs):
+    os.makedirs(host_logs, exist_ok=True)
+    log_filename = f"{repo_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_file_path = os.path.join(host_logs, log_filename)
+    try:
+        from logging import FileHandler, Formatter
+        file_handler = FileHandler(log_file_path, mode="a")
+        file_handler.setFormatter(
+            Formatter("%(asctime)s - %(name)-12s - %(levelname)-8s - %(message)s")
+        )
+        logger.addHandler(file_handler)
+    except Exception as e:
+        logger.error("Error setting up file logging: %s", e)
+    latest_link = os.path.join(host_logs, f"latest_{repo_name}.log")
+    try:
+        if os.path.islink(latest_link) or os.path.exists(latest_link):
+            os.remove(latest_link)
+    except Exception as e:
+        logger.error("Error removing previous latest log link: %s", e)
+    try:
+        os.symlink(os.path.abspath(log_file_path), latest_link)
+        logger.info("Created symlink %s -> %s", latest_link, os.path.abspath(log_file_path))
+    except Exception as e:
+        logger.error("Error creating latest log symlink: %s", e)
+    return log_file_path
+
+def get_repo_owner_and_name(repo_url: str) -> tuple:
+    """
+    Extracts the owner and repository name from a GitHub repository URL.
+    Expected URL format: https://github.com/<owner>/<repo> (optionally ending with '.git').
+    """
+    if repo_url.endswith(".git"):
+        repo_url = repo_url[:-4]
+    repo_url = repo_url.rstrip("/")
+    parts = repo_url.split("/")
+    if len(parts) < 5:
+        raise ValueError("Invalid repository URL format. Expected 'https://github.com/<owner>/<repo>'")
+    owner = parts[3]
+    repo_name = parts[4]
+    return owner, repo_name
+
+def run_pipeline(repo: str, config_file: str, debug: bool = False, version: bool = False):
+    """
+    Executes the conversation pipeline using the provided parameters.
+    If --version is specified, prints version info and exits.
+    If --debug is enabled, sets debug mode.
+    """
+    if version:
+        print("Application version: 1.0.0")
+        sys.exit(0)
+    
+    if debug:
+        config.set("DEBUG", True)
+        logger.info("Debug mode enabled.")
+    
+    enable_tracing()
+
+    # Required configuration
+    api_key = config.get("API_TOKEN_OPENAI")
+    model = config.get("LLM_MODEL")
+    if not api_key or not model:
+        logger.error("Missing configuration: API_TOKEN_OPENAI and LLM_MODEL are required.")
+        sys.exit(1)
+
+    run_in_container = str(config.get("RUN_TOOLS_IN_CONTAINER")).lower() in ("true", "1", "yes")
+    docker_image = config.get("TOOLS_DOCKER_IMAGE", "my_tools_container")
+
+    # Get the script directory
+    script_dir = config.get("SCRIPT_DIR")
+    if not script_dir:
+        logger.error("SCRIPT_DIR is not set in configuration.")
+        sys.exit(1)
+    
+    # Centralize data directory and subdirectories for logs, repos, thoughts, and requests
+    data_dir = os.path.join(script_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    config.set("DATA_DIR", data_dir)
+    host_repos    = os.path.join(data_dir, "repos")
+    host_logs     = os.path.join(data_dir, "logs")
+    host_thoughts = os.path.join(data_dir, "thoughts")
+    host_requests = os.path.join(data_dir, "requests")
+    os.makedirs(host_repos, exist_ok=True)
+    os.makedirs(host_logs, exist_ok=True)
+    os.makedirs(host_thoughts, exist_ok=True)
+    os.makedirs(host_requests, exist_ok=True)
+
+    repo_param = repo
+    if repo_param.startswith("http") or repo_param.endswith(".git"):
+        feature_branch = config.get("GITHUB_FEATURE_BRANCH")
+        if not feature_branch:
+            logger.error("Missing configuration: GITHUB_FEATURE_BRANCH must be set in .config.yml or ENV.")
+            sys.exit(1)
+        try:
+            owner, repo_name = get_repo_owner_and_name(repo_param)
+        except Exception as e:
+            logger.error("Failed to extract owner and repo name: %s", e)
+            sys.exit(1)
+        config.set("REPO_OWNER", owner)
+        try:
+            local_repo_path = clone_repo(repo_param, feature_branch)
+        except Exception as e:
+            logger.error("Failed to clone repository: %s", e)
+            sys.exit(1)
+        repo_name = os.path.basename(local_repo_path)
+        safe_repo_path = local_repo_path
+    else:
+        repo_name = repo_param
+        default_owner = config.get("GITHUB_ORGANIZATION")
+        if not default_owner:
+            logger.error("Missing configuration: GITHUB_ORGANIZATION must be set.")
+            sys.exit(1)
+        config.set("REPO_OWNER", default_owner)
+        safe_repo_path = os.path.join(host_repos, repo_name)
+
+    config.set("REPO_NAME", repo_name)
+
+    logger.line(style=2)
+    logger.info("Repository selected: %s", repo_name)
+    logger.info("Repository owner set to: %s", config.get("REPO_OWNER"))
+    logger.line(style=1)
+    setup_file_logging(repo_name, host_logs)
+
+    if run_in_container:
+        set_sandbox_dir(script_dir)
+    else:
+        os.makedirs(safe_repo_path, exist_ok=True)
+        set_sandbox_dir(safe_repo_path)
+        os.chdir(safe_repo_path)
+        logger.info("Working directory set to: %s", safe_repo_path)
+    logger.line(style=2)
+
+    sandbox_dir = config.get("SAFE_ROOT_DIR") or os.path.join(script_dir, "sandbox")
+    # Use host_thoughts as the thoughts directory inside DATA_DIR
+    try:
+        create_sandbox(sandbox_dir, safe_repo_path, host_logs, host_thoughts)
+        logger.info("Sandbox created at: %s", sandbox_dir)
+    except Exception as e:
+        logger.error("Failed to create sandbox: %s", e)
+        sys.exit(1)
+
+    init_agent_manager()
+
+    from modules.tools_registry import initialize_global_registry
+    initialize_global_registry(run_in_container)
+
+    run_conversation_loop()
+
+    logger.info("Conversation loop ended. Exiting.")
+
+def main():
+    """
+    Main entry point when running directly.
+    Registers the run_pipeline callback with the CLI and invokes the CLI app.
+    """
+    cli_lib.register_run_callback(run_pipeline)
+    cli_lib.app()
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solvin.ai - Autonomous Agentic Code Generation Platform</title>
+    <meta name="description" content="Solvin.ai: Experience the future with our autonomous AI agentic platform for advanced code generation. Build faster, smarter, and better.">
+    <!-- Favicon (Replace with actual favicon links) -->
+    <link rel="icon" href="https://via.placeholder.com/32x32/00D1FF/050816?text=S" type="image/png"> <!-- Placeholder Favicon -->
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    <style>
+        :root {
+            /* Core Palette - Deep Space / Neon Tech Theme */
+            --color-background: #050816; /* Very dark near-black blue */
+            --color-background-secondary: #10142a; /* Slightly lighter deep blue */
+            --color-background-accent: rgba(20, 25, 50, 0.6); /* Translucent accent for cards */
+            --color-text: #e8e8ff; /* Soft lavender white */
+            --color-text-secondary: #a0a0c0; /* Greyish lavender */
+            --color-primary: #00d1ff; /* Bright Cyan */
+            --color-secondary: #bf70ff; /* Vibrant Purple/Violet */
+            --color-accent-glow: rgba(0, 209, 255, 0.2); /* Cyan glow */
+            --color-secondary-glow: rgba(191, 112, 255, 0.2); /* Purple glow */
+
+            --font-heading: 'Sora', sans-serif;
+            --font-body: 'Inter', sans-serif;
+            --container-width: 1180px;
+            --border-radius: 12px; /* Slightly larger radius for modern feel */
+            --transition-speed: 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background-color: var(--color-background); /* Base dark background */
+            color: var(--color-text);
+            line-height: 1.7;
+            font-size: 16px;
+            overflow-x: hidden; /* Prevent horizontal scroll */
+            /* Subtle grid background pattern */
+            background-image: linear-gradient(rgba(0, 209, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(191, 112, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .container {
+            max-width: var(--container-width);
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: var(--font-heading);
+            color: var(--color-text);
+            margin-bottom: 1rem;
+            line-height: 1.3;
+            font-weight: 600;
+        }
+
+        h1 { font-size: 3.8rem; font-weight: 700; letter-spacing: -1px; }
+        h2 { font-size: 2.8rem; text-shadow: 0 0 15px var(--color-accent-glow); }
+        h3 { font-size: 1.6rem; }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--color-text-secondary);
+            font-size: 1.05rem;
+        }
+
+        a {
+            color: var(--color-primary);
+            text-decoration: none;
+            transition: color var(--transition-speed);
+        }
+
+        a:hover {
+            color: var(--color-secondary);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 14px 35px;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+            font-family: var(--font-heading);
+            transition: all var(--transition-speed);
+            cursor: pointer;
+            text-align: center;
+            font-size: 1.05rem;
+            border: none;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            position: relative; /* For potential future pseudo-elements */
+            overflow: hidden; /* To contain effects */
+            z-index: 1; /* Ensure button content is above effects */
+        }
+
+        .btn-primary {
+            background: linear-gradient(95deg, var(--color-primary), var(--color-secondary));
+            color: #050816; /* Dark text on bright gradient */
+            box-shadow: 0 4px 25px var(--color-accent-glow), 0 4px 25px var(--color-secondary-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px) scale(1.03);
+            box-shadow: 0 6px 30px var(--color-accent-glow), 0 6px 30px var(--color-secondary-glow);
+            filter: brightness(1.15);
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            color: var(--color-primary);
+            border: 2px solid var(--color-primary);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--color-accent-glow);
+            color: var(--color-text);
+            border-color: var(--color-secondary);
+            box-shadow: 0 0 18px var(--color-accent-glow);
+            transform: translateY(-2px);
+        }
+
+        section {
+            padding: 100px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .main-header {
+            background-color: rgba(5, 8, 22, 0.85); /* Slightly more opaque blur */
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom: 1px solid rgba(0, 209, 255, 0.2); /* Cyan border */
+            box-shadow: 0 3px 15px rgba(0, 0, 0, 0.4);
+        }
+
+        .main-header .container { display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-family: var(--font-heading); font-size: 2.1rem; font-weight: 700; color: var(--color-text); letter-spacing: -0.5px; }
+        .logo span {
+             background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+             -webkit-background-clip: text;
+             -webkit-text-fill-color: transparent;
+             background-clip: text;
+             text-fill-color: transparent;
+        }
+
+        .main-nav ul { list-style: none; display: flex; gap: 40px; }
+        .main-nav a { color: var(--color-text-secondary); font-weight: 500; padding: 8px 0; border-bottom: 3px solid transparent; font-size: 1rem; transition: all var(--transition-speed); }
+        .main-nav a:hover, .main-nav a.active { color: var(--color-primary); border-bottom-color: var(--color-primary); text-shadow: 0 0 8px var(--color-accent-glow);}
+        .header-cta { display: flex; gap: 20px; }
+
+        /* Hero Section - Enhanced Visuals */
+        .hero {
+            /* High-quality, abstract AI/network background */
+            background-image: linear-gradient(rgba(5, 8, 22, 0.75), rgba(5, 8, 22, 0.98)), url('https://images.unsplash.com/photo-1519671482749-fd09be7acce1?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1740&q=80');
+            /* Alternative: https://images.pexels.com/photos/373543/pexels-photo-373543.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2 */
+            background-size: cover;
+            background-position: center center;
+            padding: 150px 0 180px 0; /* More vertical space */
+            text-align: center;
+            position: relative;
+            border-bottom: 1px solid rgba(0, 209, 255, 0.15);
+        }
+        /* Add a more prominent radial glow */
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 70%; height: 70%; /* Larger */
+            max-width: 1000px; max-height: 1000px;
+            transform: translate(-50%, -50%);
+            background: radial-gradient(circle, var(--color-accent-glow) 0%, rgba(0, 209, 255, 0) 65%);
+            opacity: 0.7;
+            z-index: 0;
+            pointer-events: none; /* Allow clicking through */
+        }
+         .hero .container { position: relative; z-index: 1; } /* Content above glow */
+
+        .hero h1 {
+            background: linear-gradient(90deg, #ffffff, var(--color-primary), #e8e8ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+            margin-bottom: 1.8rem;
+            font-size: 4.8rem; /* Larger Hero Font */
+            line-height: 1.15;
+            text-shadow: 0 0 30px var(--color-accent-glow), 0 0 50px rgba(191, 112, 255, 0.1);
+        }
+
+        .hero p {
+            font-size: 1.35rem; /* Larger subtitle */
+            max-width: 800px;
+            margin: 0 auto 3.5rem auto;
+            color: var(--color-text); /* Brighter hero subtitle */
+            opacity: 0.9;
+        }
+        .hero-cta { display: flex; justify-content: center; gap: 30px; margin-top: 2.5rem; }
+
+        /* Shared Section Title Styling */
+        .section-title {
+            text-align: center;
+            margin-bottom: 80px;
+        }
+        .section-title h2 {
+            margin-bottom: 18px;
+            color: var(--color-text);
+             background: linear-gradient(90deg, var(--color-secondary), var(--color-primary));
+             -webkit-background-clip: text;
+             -webkit-text-fill-color: transparent;
+             background-clip: text;
+             text-fill-color: transparent;
+             display: inline-block; /* Needed for gradient */
+        }
+        .section-title p {
+            max-width: 700px;
+            margin: 0 auto;
+            color: var(--color-text-secondary);
+            font-size: 1.15rem;
+        }
+
+        /* Features Section - Glassmorphism Cards */
+        .features {
+             background-color: var(--color-background-secondary);
+             border-top: 1px solid rgba(0, 209, 255, 0.1);
+             border-bottom: 1px solid rgba(0, 209, 255, 0.1);
+             /* Angled gradient + grid pattern */
+             background-image: linear-gradient(160deg, rgba(16, 20, 42, 0.95), rgba(5, 8, 22, 0.95)),
+                               linear-gradient(rgba(0, 209, 255, 0.03) 1px, transparent 1px),
+                               linear-gradient(90deg, rgba(191, 112, 255, 0.03) 1px, transparent 1px);
+             background-size: cover, 30px 30px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 50px; /* More spacing */
+        }
+
+        .feature-item {
+            background-color: var(--color-background-accent); /* Use translucent accent */
+            padding: 40px 35px; /* More padding */
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(0, 209, 255, 0.2); /* Slightly stronger border */
+            transition: transform var(--transition-speed), box-shadow var(--transition-speed), border-color var(--transition-speed), background-color var(--transition-speed);
+            text-align: left;
+            backdrop-filter: blur(8px); /* Stronger blur effect */
+            position: relative;
+            overflow: hidden;
+             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2); /* Subtle initial shadow */
+        }
+         /* Add a dynamic border highlight on hover */
+        .feature-item::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border: 2px solid transparent;
+            border-radius: inherit; /* Match parent radius */
+            transition: border-color 0.5s ease;
+            pointer-events: none; /* Allow clicks through */
+             z-index: 0;
+        }
+        .feature-item:hover::before {
+             border-color: var(--color-primary);
+             animation: pulse-border 1.5s infinite ease-in-out;
+        }
+        @keyframes pulse-border {
+            0% { border-color: var(--color-primary); opacity: 0.7; }
+            50% { border-color: var(--color-secondary); opacity: 1; }
+            100% { border-color: var(--color-primary); opacity: 0.7; }
+        }
+
+        .feature-item > * { position: relative; z-index: 1; } /* Content above effects */
+
+        .feature-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 45px rgba(0, 209, 255, 0.15);
+            background-color: rgba(30, 35, 70, 0.7); /* Slightly change BG on hover */
+        }
+
+        .feature-icon-wrapper {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            padding: 18px; /* Larger icon bg */
+            border-radius: 50%;
+            margin-bottom: 30px;
+            box-shadow: 0 0 25px var(--color-accent-glow);
+        }
+        .feature-item i {
+            font-size: 2rem; /* Larger Icon size */
+            color: var(--color-background);
+            display: block;
+             width: 32px; height: 32px;
+             line-height: 32px;
+             text-align: center;
+        }
+
+        .feature-item h3 {
+            font-size: 1.6rem;
+            margin-bottom: 15px;
+            color: var(--color-text);
+            transition: color var(--transition-speed);
+        }
+         .feature-item:hover h3 {
+             color: var(--color-primary);
+             text-shadow: 0 0 10px var(--color-accent-glow);
+         }
+
+        .feature-item p {
+            font-size: 1rem;
+            color: var(--color-text-secondary);
+            line-height: 1.8;
+        }
+
+        /* How It Works Section - Dynamic Flow */
+        .how-it-works {
+            position: relative;
+             /* Use a subtle, dynamic network background image */
+            background-image: linear-gradient(rgba(5, 8, 22, 0.92), rgba(5, 8, 22, 0.99)), url('https://images.pexels.com/photos/5474028/pexels-photo-5474028.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2');
+            /* Alt: https://images.pexels.com/photos/7131075/pexels-photo-7131075.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2 */
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed; /* Parallax effect */
+        }
+
+        .how-it-works-steps {
+            display: flex;
+            justify-content: space-between;
+            gap: 40px;
+            margin-top: 60px;
+            position: relative;
+        }
+        /* Animated Connecting Line */
+         .how-it-works-steps::before {
+            content: '';
+            position: absolute;
+            top: 50px; /* Align with middle of number */
+            left: 15%; /* Start after first half of first card */
+            right: 15%; /* End before second half of last card */
+            height: 4px;
+            background: linear-gradient(90deg, transparent, var(--color-primary), var(--color-secondary), transparent);
+            opacity: 0.6;
+            z-index: 0;
+             /* Add a subtle animation maybe */
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            background: rgba(16, 20, 42, 0.8); /* Slightly more opaque card */
+            padding: 40px 30px;
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(191, 112, 255, 0.3); /* Subtle purple border */
+            backdrop-filter: blur(6px);
+            z-index: 1; /* Above connecting line */
+             transition: transform var(--transition-speed), box-shadow var(--transition-speed), border-color var(--transition-speed);
+             box-shadow: 0 5px 20px rgba(0,0,0, 0.15);
+        }
+        .step:hover {
+             transform: translateY(-8px) scale(1.02);
+             box-shadow: 0 12px 35px var(--color-secondary-glow);
+             border-color: var(--color-secondary);
+        }
+
+        .step-number {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            width: 70px; /* Larger step number */
+            height: 70px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            color: var(--color-background);
+            font-family: var(--font-heading);
+            font-weight: 700;
+            font-size: 2rem;
+            margin-bottom: 30px;
+            box-shadow: 0 6px 20px var(--color-secondary-glow);
+            border: 3px solid rgba(5, 8, 22, 0.6); /* Inner border for depth */
+        }
+
+        .step h3 {
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+            color: var(--color-secondary);
+             transition: color var(--transition-speed);
+        }
+         .step:hover h3 {
+             color: var(--color-primary);
+         }
+        .step p { font-size: 1rem; }
+
+        /* Use Cases Section - Icon Focused */
+        .use-cases {
+            background-color: var(--color-background); /* Match base */
+            border-top: 1px solid rgba(191, 112, 255, 0.15);
+            border-bottom: 1px solid rgba(191, 112, 255, 0.15);
+             /* Subtle texture overlay */
+             background-image: linear-gradient(rgba(5, 8, 22, 0.97), rgba(5, 8, 22, 0.97)), url('https://www.transparenttextures.com/patterns/low-contrast-linen.png');
+             background-size: auto, auto;
+        }
+
+        .use-cases-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+            gap: 40px;
+        }
+
+        .use-case-item {
+            display: flex; /* Align icon and text */
+            align-items: flex-start; /* Align top */
+            gap: 25px;
+            padding: 35px;
+            background-color: var(--color-background-secondary);
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform var(--transition-speed), box-shadow var(--transition-speed), border-left-color var(--transition-speed);
+            border-left: 6px solid var(--color-primary); /* Accent border */
+            position: relative;
+             box-shadow: 0 4px 15px rgba(0,0,0, 0.1);
+        }
+        .use-case-item:nth-child(even) { border-left-color: var(--color-secondary); }
+
+         .use-case-item:hover {
+             transform: translateX(5px);
+             box-shadow: 0 10px 30px rgba(0,0,0, 0.2);
+             border-left-color: #fff; /* Brighten border on hover */
+         }
+
+        .use-case-icon-wrapper {
+            flex-shrink: 0; /* Prevent icon from shrinking */
+            margin-top: 5px; /* Align icon nicely */
+             background: linear-gradient(135deg, rgba(0, 209, 255, 0.1), rgba(191, 112, 255, 0.1));
+             padding: 15px;
+             border-radius: 50%;
+             display: inline-flex;
+             align-items: center;
+             justify-content: center;
+             border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .use-case-icon {
+            font-size: 1.8rem;
+            color: var(--color-primary);
+            opacity: 0.9;
+            width: 30px; height: 30px;
+             line-height: 30px;
+             text-align: center;
+             transition: color var(--transition-speed);
+        }
+         .use-case-item:nth-child(even) .use-case-icon { color: var(--color-secondary); }
+         .use-case-item:hover .use-case-icon { color: #fff; }
+
+         .use-case-content h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: var(--color-text);
+             transition: color var(--transition-speed);
+        }
+         .use-case-item:hover .use-case-content h3 {
+              color: var(--color-primary);
+         }
+         .use-case-item:nth-child(even):hover .use-case-content h3 {
+             color: var(--color-secondary);
+         }
+        .use-case-content p { font-size: 0.98rem; line-height: 1.7; margin-bottom: 0; }
+
+        /* Testimonials */
+        .testimonials {
+             background-color: var(--color-background-secondary); /* Different BG */
+             /* More pronounced grid */
+             background-image: linear-gradient(rgba(0, 209, 255, 0.05) 1px, transparent 1px),
+                               linear-gradient(90deg, rgba(191, 112, 255, 0.05) 1px, transparent 1px);
+             background-size: 40px 40px;
+             border-top: 1px solid rgba(191, 112, 255, 0.1);
+        }
+
+        .testimonial-slider {
+            max-width: 900px;
+            margin: 60px auto 0 auto;
+            text-align: center;
+            background: linear-gradient(155deg, var(--color-background-accent), #151935); /* Gradient BG */
+            padding: 60px 70px;
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(191, 112, 255, 0.25);
+            box-shadow: 0 15px 50px rgba(0,0,0, 0.3);
+             position: relative;
+             backdrop-filter: blur(5px);
+        }
+        /* Quote Marks - Styled */
+        .testimonial-slider::before {
+            content: '\f10d'; /* Font Awesome quote left */
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            top: 30px; left: 40px;
+            font-size: 3.5rem;
+            color: var(--color-primary);
+            opacity: 0.15;
+             z-index: 0;
+        }
+         .testimonial-slider::after {
+            content: '\f10e'; /* Font Awesome quote right */
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            bottom: 30px; right: 40px;
+            font-size: 3.5rem;
+            color: var(--color-secondary);
+            opacity: 0.15;
+             z-index: 0;
+         }
+         .testimonial-content { position: relative; z-index: 1;}
+
+        .testimonial-quote {
+            font-size: 1.3rem; /* Larger quote */
+            font-style: italic;
+            margin-bottom: 30px;
+            color: var(--color-text);
+            line-height: 1.9;
+             opacity: 0.95;
+        }
+
+        .testimonial-author {
+            font-weight: 700; /* Bolder name */
+            color: var(--color-primary);
+            font-size: 1.15rem;
+            font-family: var(--font-heading);
+        }
+        .testimonial-author span {
+            display: block;
+            font-weight: 400;
+            font-size: 1rem;
+             color: var(--color-text-secondary);
+             margin-top: 8px;
+             font-family: var(--font-body);
+        }
+
+        /* Call to Action Section */
+        .cta-section {
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            padding: 80px 0;
+            text-align: center;
+            position: relative;
+        }
+        /* Add subtle shapes/glows */
+         .cta-section::before {
+             content: '';
+             position: absolute;
+             top: -50px; left: 10%;
+             width: 150px; height: 150px;
+             background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+             border-radius: 50%;
+             opacity: 0.5;
+         }
+         .cta-section::after {
+             content: '';
+             position: absolute;
+             bottom: -60px; right: 15%;
+             width: 200px; height: 200px;
+             background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
+             border-radius: 50%;
+             opacity: 0.6;
+         }
+
+        .cta-section .container { position: relative; z-index: 1; }
+
+        .cta-section h2 {
+            color: var(--color-background);
+            font-size: 2.8rem; /* Larger CTA headline */
+            margin-bottom: 20px;
+             text-shadow: 1px 1px 3px rgba(0,0,0, 0.1);
+        }
+        .cta-section p {
+             color: rgba(5, 8, 22, 0.9); /* Darker text */
+            max-width: 700px;
+            margin: 0 auto 40px auto;
+            font-size: 1.2rem; /* Larger CTA text */
+        }
+        .cta-section .btn {
+            background: var(--color-background);
+            color: var(--color-primary);
+             border: 2px solid var(--color-background);
+             padding: 18px 45px; /* Larger CTA button */
+             font-size: 1.2rem;
+             box-shadow: 0 8px 25px rgba(0,0,0, 0.25);
+             transition: all var(--transition-speed), color 0s; /* Prevent color transition delay */
+        }
+        .cta-section .btn:hover {
+            background: transparent;
+            color: var(--color-background);
+            border-color: var(--color-background);
+             transform: translateY(-4px) scale(1.03);
+             box-shadow: 0 12px 30px rgba(0,0,0, 0.3);
+        }
+
+        /* Footer */
+        .main-footer {
+            background-color: #030610; /* Even darker footer bg */
+            padding: 60px 0 30px 0;
+            border-top: 1px solid rgba(0, 209, 255, 0.2);
+            font-size: 0.98rem;
+             color: var(--color-text-secondary);
+        }
+        .footer-content { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 40px; margin-bottom: 50px; }
+        .footer-about { flex-basis: 35%; }
+        .footer-logo .logo { font-size: 1.8rem; margin-bottom: 15px; }
+        .footer-about p { font-size: 0.95rem; line-height: 1.6; margin-bottom: 0; opacity: 0.8; }
+
+        .footer-links { flex-basis: 55%; display: flex; justify-content: space-between; gap: 30px; flex-wrap: wrap;}
+        .footer-column h4 { font-size: 1.1rem; color: var(--color-text); margin-bottom: 20px; font-weight: 600;}
+        .footer-column ul { list-style: none; }
+        .footer-column li { margin-bottom: 12px; }
+        .footer-column a { color: var(--color-text-secondary); }
+        .footer-column a:hover { color: var(--color-primary); text-decoration: underline; text-underline-offset: 4px; }
+
+        .footer-bottom { display: flex; justify-content: space-between; align-items: center; padding-top: 30px; border-top: 1px solid rgba(191, 112, 255, 0.15); font-size: 0.9rem; opacity: 0.8; flex-wrap: wrap; gap: 15px;}
+        .footer-social a { color: var(--color-text-secondary); font-size: 1.5rem; margin-left: 20px; transition: color var(--transition-speed), transform var(--transition-speed); display: inline-block;}
+        .footer-social a:hover { color: var(--color-primary); transform: scale(1.25) rotate(5deg); }
+
+        /* Responsive Design Adjustments */
+        @media (max-width: 1024px) {
+             h1 { font-size: 3.4rem; }
+             h2 { font-size: 2.5rem; }
+             .hero h1 { font-size: 4rem; }
+             .hero { padding: 130px 0 150px 0; }
+             .features-grid { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; }
+              .footer-content { gap: 30px; }
+              .footer-about { flex-basis: 100%; text-align: center; }
+              .footer-links { flex-basis: 100%; justify-content: space-around; }
+        }
+
+        @media (max-width: 768px) {
+            body { font-size: 15px; }
+            h1 { font-size: 2.8rem; }
+            h2 { font-size: 2.2rem; }
+            .hero h1 { font-size: 3.2rem; }
+            .hero p { font-size: 1.2rem; }
+            .hero { padding: 100px 0 120px 0; }
+
+            .main-header .container { flex-direction: column; gap: 20px; }
+            .main-nav ul { justify-content: center; flex-wrap: wrap; gap: 25px 35px; }
+            .header-cta { justify-content: center; margin-top: 10px; }
+
+            section { padding: 80px 0; }
+            .section-title { margin-bottom: 60px; }
+            .section-title h2 { font-size: 2.3rem; }
+            .section-title p { font-size: 1.1rem; }
+
+            .features-grid { grid-template-columns: 1fr; gap: 35px; }
+            .feature-item { text-align: center; padding: 35px 30px; }
+             .feature-icon-wrapper { margin-left: auto; margin-right: auto; }
+
+            .how-it-works-steps { flex-direction: column; align-items: center; gap: 35px;}
+            .how-it-works-steps::before { display: none; }
+            .step { max-width: 420px; width: 90%; }
+
+            .use-cases-grid { grid-template-columns: 1fr; gap: 30px;}
+            .use-case-item { padding: 30px 25px; flex-direction: column; align-items: center; text-align: center; }
+            .use-case-icon-wrapper { margin-bottom: 15px; margin-top: 0; }
+
+            .testimonial-slider { padding: 50px 40px; }
+            .testimonial-quote { font-size: 1.15rem; }
+             .testimonial-slider::before, .testimonial-slider::after { font-size: 3rem; opacity: 0.1; }
+
+             .cta-section h2 { font-size: 2.4rem; }
+             .cta-section p { font-size: 1.1rem; }
+
+             .footer-bottom { flex-direction: column; text-align: center; gap: 20px; }
+             .footer-social { order: -1; /* Move social icons above copyright */ }
+        }
+
+         @media (max-width: 480px) {
+             h1 { font-size: 2.4rem; }
+             h2 { font-size: 2rem; }
+             .hero h1 { font-size: 2.8rem; line-height: 1.2; }
+             .hero p { font-size: 1.1rem; }
+             .hero { padding: 80px 0 100px 0; }
+             .hero-cta { flex-direction: column; gap: 20px; align-items: center; }
+             .btn { width: 90%; max-width: 320px; padding: 14px 30px; font-size: 1rem; }
+             .cta-section .btn { width: 90%; max-width: 320px; padding: 16px 35px; font-size: 1.1rem;}
+
+             section { padding: 70px 0;}
+             .section-title { margin-bottom: 50px; }
+             .section-title h2 { font-size: 2rem; }
+              .section-title p { font-size: 1rem; }
+
+             .feature-item { padding: 30px 25px; }
+             .testimonial-slider { padding: 40px 25px; }
+              .testimonial-slider::before, .testimonial-slider::after { display: none; /* Hide quotes on smallest screens */ }
+
+             .footer-links { justify-content: center; }
+             .footer-column { flex-basis: 100%; text-align: center; }
+             .footer-social a { margin: 0 15px; }
+             .main-footer { padding-top: 50px; }
+         }
+
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="main-header">
+        <div class="container">
+            <a href="#home" class="logo">Solvin<span>.ai</span></a>
+            <nav class="main-nav">
+                <ul>
+                    <li><a href="#features" class="active">Features</a></li>
+                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#use-cases">Use Cases</a></li>
+                    <!-- Placeholder links -->
+                    <li><a href="#">Docs</a></li>
+                    <li><a href="#early-access">Early Access</a></li>
+                </ul>
+            </nav>
+            <div class="header-cta">
+                <a href="#" class="btn btn-secondary">Sign In</a>
+                <a href="#early-access" class="btn btn-primary">Request Access</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Hero Section -->
+        <section class="hero" id="home">
+            <div class="container">
+                <h1>The Autonomous AI Engineer <br> That Builds Your Code.</h1>
+                <p>Solvin.ai leverages a sophisticated agentic platform to understand complex requirements, generate production-ready code, debug, and accelerate your entire software development lifecycle.</p>
+                <div class="hero-cta">
+                    <a href="#early-access" class="btn btn-primary">Request Early Access Now</a>
+                    <a href="#features" class="btn btn-secondary">Explore Features</a>
+                </div>
+                <!-- Optional: Placeholder for a subtle animation or graphic -->
+                 <!-- <img src="glowing-network-graphic.svg" alt="AI Network Visualization" style="position: absolute; bottom: 10%; left: 50%; transform: translateX(-50%); opacity: 0.1; max-width: 80%; pointer-events: none;"> -->
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="features" id="features">
+            <div class="container">
+                <div class="section-title">
+                    <h2>Beyond Completion: True Agentic Development</h2>
+                    <p>Solvin.ai isn't just writing lines of code; it's architecting solutions, reasoning about complexity, and acting as an intelligent development partner.</p>
+                </div>
+                <div class="features-grid">
+                    <!-- Feature 1 -->
+                    <div class="feature-item">
+                        <div class="feature-icon-wrapper"><i class="fas fa-brain"></i></div>
+                        <h3>Advanced Agentic Reasoning</h3>
+                        <p>Understands high-level goals, project context, and nuances in natural language to generate coherent, functional software components.</p>
+                    </div>
+                    <!-- Feature 2 -->
+                    <div class="feature-item">
+                         <div class="feature-icon-wrapper"><i class="fas fa-layer-group"></i></div>
+                        <h3>Full Stack Generation</h3>
+                        <p>Capable of building entire features, including frontend UI (React, Vue, etc.), backend logic (Python, Node, Java, Go), and database interactions.</p>
+                    </div>
+                     <!-- Feature 3 -->
+                    <div class="feature-item">
+                         <div class="feature-icon-wrapper"><i class="fas fa-bug-slash"></i></div>
+                        <h3>Autonomous Debugging & Testing</h3>
+                        <p>Proactively identifies potential issues, suggests fixes, and can even generate basic test cases to ensure code robustness.</p>
+                    </div>
+                    <!-- Feature 4 -->
+                    <div class="feature-item">
+                        <div class="feature-icon-wrapper"><i class="fas fa-sync-alt"></i></div>
+                        <h3>Iterative Refinement Loop</h3>
+                        <p>Engage in dialogue. Provide feedback, clarify requirements, and watch Solvin.ai intelligently adapt and improve the generated codebase.</p>
+                    </div>
+                    <!-- Feature 5 -->
+                     <div class="feature-item">
+                         <div class="feature-icon-wrapper"><i class="fas fa-book-open-reader"></i></div>
+                        <h3>Context-Aware Learning</h3>
+                        <p>Learns from your existing codebase, documentation, and feedback to better align with your project's style and conventions over time.</p>
+                    </div>
+                    <!-- Feature 6 -->
+                     <div class="feature-item">
+                         <div class="feature-icon-wrapper"><i class="fas fa-bolt"></i></div>
+                        <h3>Unprecedented Velocity</h3>
+                        <p>Dramatically reduce time spent on boilerplate, repetitive tasks, and initial implementations. Focus your team on innovation and complex challenges.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section class="how-it-works" id="how-it-works">
+            <div class="container">
+                <div class="section-title">
+                    <h2>From Intent to Intelligent Implementation</h2>
+                    <p>Our streamlined process transforms your requirements into working code with minimal friction, powered by autonomous AI.</p>
+                </div>
+                <div class="how-it-works-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <h3>Define & Describe</h3>
+                        <p>Articulate your task using natural language, technical specs, user stories, or even point to relevant designs or documents.</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <h3>Solvin Reasons & Builds</h3>
+                        <p>The autonomous agent analyzes the input, plans the execution steps, generates code, and handles dependencies.</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <h3>Review, Refine & Deploy</h3>
+                        <p>Collaborate with Solvin.ai to review the output, provide feedback for iterations, and integrate the polished code.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Use Cases Section -->
+        <section class="use-cases" id="use-cases">
+            <div class="container">
+                 <div class="section-title">
+                    <h2>Empowering Developers Across the Spectrum</h2>
+                    <p>Solvin.ai is a versatile powerhouse, accelerating development for a wide array of applications and tasks.</p>
+                </div>
+                <div class="use-cases-grid">
+                    <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-rocket use-case-icon"></i></div>
+                       <div class="use-case-content">
+                            <h3>Rapid Feature Development</h3>
+                            <p>Build and iterate on new product features, APIs, and services at lightning speed, from concept to functional code.</p>
+                        </div>
+                    </div>
+                     <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-code-branch use-case-icon"></i></div>
+                        <div class="use-case-content">
+                            <h3>Complex Logic Implementation</h3>
+                            <p>Tackle intricate algorithms, business rules, or state management challenges with AI assistance for accuracy and efficiency.</p>
+                        </div>
+                    </div>
+                    <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-tools use-case-icon"></i></div>
+                       <div class="use-case-content">
+                            <h3>Internal Tools & Automation</h3>
+                            <p>Quickly generate scripts, CLIs, admin panels, or automation workflows to streamline internal processes.</p>
+                        </div>
+                    </div>
+                    <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-cloud use-case-icon"></i></div>
+                        <div class="use-case-content">
+                            <h3>Cloud Infrastructure Snippets</h3>
+                            <p>Assist in generating configuration code (e.g., Terraform, CloudFormation snippets) based on descriptions.</p>
+                        </div>
+                    </div>
+                     <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-mobile-screen-button use-case-icon"></i></div>
+                        <div class="use-case-content">
+                            <h3>Cross-Platform Components</h3>
+                            <p>Generate foundational code for components intended for use across web, mobile, or desktop platforms.</p>
+                        </div>
+                    </div>
+                     <div class="use-case-item">
+                       <div class="use-case-icon-wrapper"><i class="fas fa-graduation-cap use-case-icon"></i></div>
+                        <div class="use-case-content">
+                            <h3>Learning & Exploration</h3>
+                            <p>Understand how to implement specific patterns or use new libraries by asking Solvin.ai to generate examples.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Testimonials Section (Placeholder Content) -->
+        <section class="testimonials" id="testimonials">
+            <div class="container">
+                 <div class="section-title">
+                    <h2>Trusted by Forward-Thinking Engineering Teams</h2>
+                    <p>Hear how pioneers are leveraging Solvin.ai to redefine development workflows and achieve remarkable results.</p>
+                </div>
+                <div class="testimonial-slider">
+                   <div class="testimonial-content">
+                        <p class="testimonial-quote">"Solvin.ai is easily the biggest leap in developer productivity I've seen in my career. It doesn't just write code, it understands intent. We're shipping complex features faster than ever before, and the code quality is consistently high."</p>
+                        <p class="testimonial-author">Alex Chen <span>CTO, QuantumLeap Software</span></p>
+                    </div>
+                    <!-- Add more testimonials maybe with JS later for a carousel -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Call to Action Section -->
+        <section class="cta-section" id="early-access">
+            <div class="container">
+                <h2>Step into the Future of Software Creation.</h2>
+                <p>Join our exclusive early access program and be among the first to harness the power of Solvin.ai's autonomous agentic coding platform. Limited spots available.</p>
+                <a href="#" class="btn">Request Your Early Access Invite</a>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-about">
+                    <a href="#home" class="logo">Solvin<span>.ai</span></a>
+                     <p>The Autonomous Agentic Platform for Code Generation. Accelerating software development with intelligent automation.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4>Product</h4>
+                        <ul>
+                            <li><a href="#features">Features</a></li>
+                            <li><a href="#how-it-works">How It Works</a></li>
+                            <li><a href="#use-cases">Use Cases</a></li>
+                            <li><a href="#">Integrations</a></li>
+                             <li><a href="#early-access">Early Access</a></li>
+                        </ul>
+                    </div>
+                     <div class="footer-column">
+                        <h4>Resources</h4>
+                        <ul>
+                            <li><a href="#">Documentation</a></li>
+                            <li><a href="#">Blog</a></li>
+                            <li><a href="#">Case Studies</a></li>
+                            <li><a href="#">Security</a></li>
+                            <li><a href="#">Support</a></li>
+                        </ul>
+                    </div>
+                     <div class="footer-column">
+                        <h4>Company</h4>
+                        <ul>
+                            <li><a href="#">About Us</a></li>
+                            <li><a href="#">Careers</a></li>
+                            <li><a href="#">Contact Us</a></li>
+                            <li><a href="#">Press</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div>
+            <div class="footer-bottom">
+                 <p>© 2024 Solvin.ai Corporation. All rights reserved.</p>
+                 <div class="footer-legal-links">
+                      <a href="#">Terms of Service</a> | <a href="#">Privacy Policy</a>
+                 </div>
+                <div class="footer-social">
+                    <a href="#" aria-label="Twitter / X"><i class="fab fa-twitter"></i></a>
+                    <a href="#" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                    <a href="#" aria-label="GitHub"><i class="fab fa-github"></i></a>
+                    <a href="#" aria-label="Discord"><i class="fab fa-discord"></i></a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Optional JS for future interactions like animations on scroll, testimonial carousel etc. -->
+    <!-- <script src="script.js"></script> -->
+
+</body>
+</html>
