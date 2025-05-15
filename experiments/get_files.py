@@ -29,6 +29,36 @@ EXT_LANG = {
     "pl": "perl",
 }
 
+LANG_COMMENT = {
+    "python": "#",
+    "bash": "#",
+    "ruby": "#",
+    "perl": "#",
+    "php": "//",
+    "c": "//",
+    "cpp": "//",
+    "go": "//",
+    "rust": "//",
+    "javascript": "//",
+    "typescript": "//",
+    "java": "//",
+    "json": "//",
+    "yaml": "#",
+    "markdown": "<!--",
+    "html": "<!--",
+    "css": "/*",
+    "plaintext": "#",
+}
+
+def get_comment(lang, text):
+    comment = LANG_COMMENT.get(lang, "#")
+    if comment == "<!--":
+        return f"<!-- {text} -->"
+    elif comment == "/*":
+        return f"/* {text} */"
+    else:
+        return f"{comment} {text}"
+
 def guess_language(filename):
     ext = os.path.splitext(filename)[1][1:].lower()
     return EXT_LANG.get(ext, "plaintext") if ext else "plaintext"
@@ -85,8 +115,6 @@ def resolve_targets(targets):
             try:
                 for root, _, files in os.walk("."):
                     for f in files:
-                        # Use os.path.basename to handle potential path components in f
-                        # Though os.walk usually provides just filenames in files list
                         if f.lower() == target.lower():
                             matches.append(os.path.normpath(os.path.join(root, f)))
             except Exception as e:
@@ -131,7 +159,7 @@ def main():
             print("\n\n", end="")
         printed_any = True
         code_header = f"```{lang}" if lang else "```"
-        print(f"{code_header}\n# {rel_path}\n")
+        print(f"{code_header}\n{get_comment(lang, rel_path)}\n")
         try:
             # Handle potential encoding issues, fallback if needed
             try:
@@ -154,13 +182,12 @@ def main():
         if printed_any: print("\n") # Add separator if files were printed
         print("# --- Warnings ---")
         for target in unmatched:
-            print(f"# Target not found or pattern yielded no files: '{target}'")
+            lang = guess_language(target)
+            print(get_comment(lang, f"Target not found or pattern yielded no files: '{target}'"))
 
     if not printed_any and not unmatched:
-         # This case should ideally not happen if input validation works, but good to have.
          print("# No files found matching the targets or patterns.")
     elif not printed_any and unmatched:
-         # Only print this specific message if only unmatched targets were found
          print("# No files found matching the target filenames, paths or patterns.")
 
 
