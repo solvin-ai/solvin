@@ -1,0 +1,3 @@
+[submodule "experiments/demo"]
+	path = experiments/demo
+	url = https://github.com/solvin-ai/demo

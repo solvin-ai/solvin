@@ -1,0 +1,241 @@
+# ───────────────────────────────────────
+# scripts/docker-compose.yml
+# ───────────────────────────────────────
+
+services:
+
+  # ----------------------------------------------------------------------------
+  # NATS / JetStream
+  # ----------------------------------------------------------------------------
+  nats:
+    image: nats:2.11.3-alpine3.21
+    container_name: "${COMPOSE_PROJECT_NAME}_${NATS_NAME:-nats}"
+    ports:
+      - "${NATS_CLIENT_PORT}:${NATS_CLIENT_PORT}"
+      - "${NATS_MONITOR_PORT}:${NATS_MONITOR_PORT}"
+      - "${NATS_CLUSTER_PORT}:${NATS_CLUSTER_PORT}"
+    command:
+      - "-js"
+      - "-m"
+      - "${NATS_MONITOR_PORT}"
+      - "-c"
+      - "/etc/nats/nats-server.conf"
+    volumes:
+      - ../backend/services/3rd-party/jetstream/nats-server.conf:/etc/nats/nats-server.conf
+      - nats_nats-data:/nats-data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "wget -q -O - http://localhost:${NATS_MONITOR_PORT}/healthz || exit 1"
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 1s
+
+  # ----------------------------------------------------------------------------
+  # Frontend (Next.js dev server, hot-reload)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: "${COMPOSE_PROJECT_NAME}_${FRONTEND_NAME:-frontend}"
+    working_dir: /app
+    volumes:
+      - ../frontend:/app
+      - frontend_next_cache:/app/.next      
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
+    command: ["npm", "run", "dev"]
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "wget -q -O - http://localhost:${FRONTEND_PORT}/api/health || exit 1"
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 1s
+
+  # ----------------------------------------------------------------------------
+  # Configs service
+  # ----------------------------------------------------------------------------
+  configs:
+    build:
+      context: ../backend
+      dockerfile: services/configs/docker/Dockerfile
+    container_name: "${COMPOSE_PROJECT_NAME}_${CONFIGS_NAME}"
+    depends_on:
+      nats:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "${CONFIGS_PORT}:${CONFIGS_PORT}"
+    volumes:
+      - ../backend/services/configs/src:/app
+      - ../data/logs/services/configs:/app/logs
+    environment:
+      - SERVICE_NAME=${CONFIGS_NAME}
+      - SERVICE_PORT=${CONFIGS_PORT}
+      - BASE_PATH=/app
+    command: >
+      sh -c '
+        uvicorn $${SERVICE_NAME}:app \
+          --host 0.0.0.0 \
+          --port $${SERVICE_PORT} \
+          --reload \
+          --log-level debug
+      '
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          wget -q -O - http://localhost:${CONFIGS_PORT}/health \
+          || wget -q -O - http://localhost:${CONFIGS_PORT}/api/v1/health \
+          || exit 1
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # Repos service
+  # ----------------------------------------------------------------------------
+  repos:
+    build:
+      context: ../backend
+      dockerfile: services/repos/docker/Dockerfile
+    container_name: "${COMPOSE_PROJECT_NAME}_${REPOS_NAME}"
+    depends_on:
+      configs:
+        condition: service_healthy
+    ports:
+      - "${REPOS_PORT}:${REPOS_PORT}"
+    volumes:
+      - ../backend/services/repos/src:/app
+      - ../data/logs/services/repos:/app/logs
+      - ../data/repos:/app/repos
+      - ../data/dbs:/app/dbs
+    environment:
+      - SERVICE_NAME=${REPOS_NAME}
+      - SERVICE_PORT=${REPOS_PORT}
+      - SERVICE_URL_CONFIGS=http://configs:${CONFIGS_PORT}
+      - DB_PATH=/app/dbs/repos.db
+      - API_TOKEN_GITHUB
+      - BASE_PATH=/app
+    command: >
+      sh -c '
+        uvicorn $${SERVICE_NAME}:app \
+          --host 0.0.0.0 \
+          --port $${SERVICE_PORT} \
+          --reload \
+          --log-level debug
+      '
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          wget -q -O - http://localhost:${REPOS_PORT}/health \
+          || wget -q -O - http://localhost:${REPOS_PORT}/api/v1/health \
+          || exit 1
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # Tools service
+  # ----------------------------------------------------------------------------
+  tools:
+    build:
+      context: ../backend
+      dockerfile: services/tools/docker/Dockerfile
+    container_name: "${COMPOSE_PROJECT_NAME}_${TOOLS_NAME}"
+    depends_on:
+      repos:
+        condition: service_healthy
+    ports:
+      - "${TOOLS_PORT}:${TOOLS_PORT}"
+    volumes:
+      - ../backend/services/tools/src:/app
+      - ../data/logs/services/tools:/app/logs
+      - ../data/repos:/app/repos
+    environment:
+      - SERVICE_NAME=${TOOLS_NAME}
+      - SERVICE_PORT=${TOOLS_PORT}
+      - SERVICE_URL_CONFIGS=http://configs:${CONFIGS_PORT}
+      - API_TOKEN_GITHUB
+      - SLACK_APP_TOKEN
+      - SLACK_BOT_TOKEN
+      - BASE_PATH=/app
+    command: >
+      sh -c '
+        uvicorn $${SERVICE_NAME}:app \
+          --host 0.0.0.0 \
+          --port $${SERVICE_PORT} \
+          --reload \
+          --log-level debug
+      '
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          wget -q -O - http://localhost:${TOOLS_PORT}/health \
+          || wget -q -O - http://localhost:${TOOLS_PORT}/api/v1/health \
+          || exit 1
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # Agents service
+  # ----------------------------------------------------------------------------
+  agents:
+    build:
+      context: ../backend
+      dockerfile: services/agents/docker/Dockerfile
+    container_name: "${COMPOSE_PROJECT_NAME}_${AGENTS_NAME}"
+    depends_on:
+      tools:
+        condition: service_healthy
+    ports:
+      - "${AGENTS_PORT}:${AGENTS_PORT}"
+    volumes:
+      - ../backend/services/agents/src:/app
+      - ../data/logs/services/agents:/app/logs
+      - ../data/dbs:/app/dbs
+    environment:
+      - SERVICE_NAME=${AGENTS_NAME}
+      - SERVICE_PORT=${AGENTS_PORT}
+      - SERVICE_URL_CONFIGS=http://configs:${CONFIGS_PORT}
+      - DB_PATH=/app/dbs/agents.db
+      - SOLVIN_EXCEPTION_HALT=1
+      - OPENAI_API_KEY
+      - BASE_PATH=/app
+    command: >
+      sh -c '
+        uvicorn $${SERVICE_NAME}:app \
+          --host 0.0.0.0 \
+          --port $${SERVICE_PORT} \
+          --reload \
+          --log-level debug
+      '
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          wget -q -O - http://localhost:${AGENTS_PORT}/health \
+          || wget -q -O - http://localhost:${AGENTS_PORT}/api/v1/health \
+          || exit 1
+      interval: 5s
+      timeout: 2s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  frontend_node_modules:
+  frontend_next_cache:
+  nats_nats-data:

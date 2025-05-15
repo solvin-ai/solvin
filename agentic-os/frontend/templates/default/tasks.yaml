@@ -1,0 +1,59 @@
+- task_name: bug_fixes
+  task_prompt: >-
+    Resolve only issue #2 from the issues list.
+
+
+    1. Start by running all the unit-tests and capturing their success/failure
+    state. Share the result using the tool "share_thoughts".
+
+
+    2. After analyzing, make sure you fully understand the root cause of the
+    problem. When you get clarity of an issue's root cause and what needs to be
+    done, share your thoughts (via tool "share_thoughts").
+
+
+    3. Align to the guidelines provided by the scanning tool in the issue. 
+
+
+    4. When you make changes:
+
+
+    a) Make the minimal needed focused change, do not address anything unrelated
+    to the exact issue at hand. 
+
+
+    b) When updating a file with "write_file" tool, always print the entire
+    complete full updated file, never ever leave things like "unchanged code
+    omitted for brevity"!
+
+
+    c) Code removal:
+
+    - Don't remove any existing code comment. 
+
+    - Don't remove code you do not fully understand why it is needed.
+
+    -  When removing segment of code and not replacing it, better comment that
+    part out instead.
+
+    - If the amount of lines in the file after your changes decreases in more
+    than a few lines, it is usually as bad sign you did something wrong.
+
+
+    d) Make absolutely certain the fix does not break anything.
+
+
+    e) Always try to apply a fix as early as possible in the program flow rather
+    than just bandage where the symptom is.
+
+
+    f) Document in code comments any change you make.
+
+
+    5. Before declaring the work as complete, you must run again all the
+    unit-tests and compare the results with the first time, then make sure there
+    is no regression (no test that passed before now fails). Share the result
+    and the summary using the tool "share_thoughts".
+
+
+    START YOUR WORK NOW!

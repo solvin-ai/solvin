@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model agent_state {
+  repo_url        String
+  agent_role      String
+  agent_id        String
+  last_turn_idx   Int    @default(-1)
+  last_message_id Int    @default(-1)
+
+  @@id([repo_url, agent_role, agent_id])
+}
+
+model agents_current {
+  id         Int     @id @default(autoincrement())
+  agent_role String?
+  agent_id   String?
+  repo_url   String?
+}
+
+model agents_running {
+  id         Int       @id @default(autoincrement())
+  agent_role String
+  agent_id   String
+  repo_url   String
+  created_at DateTime? @default(now())
+}
+
+model messages {
+  repo_url            String
+  agent_role          String
+  agent_id            String
+  turn_idx            Int
+  message_idx         Int
+  role                String
+  content             String
+  timestamp           String
+  original_message_id Int
+  char_count          Int
+  raw_json            String?
+  turns               turns   @relation(fields: [repo_url, agent_role, agent_id, turn_idx], references: [repo_url, agent_role, agent_id, turn_idx], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([repo_url, agent_role, agent_id, turn_idx, message_idx])
+}
+
+model tool_meta {
+  repo_url             String
+  agent_role           String
+  agent_id             String
+  turn_idx             Int
+  tool_name            String?
+  execution_time       Float?
+  pending_deletion     Int
+  deleted              Int
+  rejection            String?
+  status               String?
+  args_hash            String?
+  preservation_policy  String?
+  normalized_args_json String
+  normalized_filename  String?
+  input_args_json      String
+  turns                turns   @relation(fields: [repo_url, agent_role, agent_id, turn_idx], references: [repo_url, agent_role, agent_id, turn_idx], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([repo_url, agent_role, agent_id, turn_idx])
+}
+
+model turns {
+  repo_url         String
+  agent_role       String
+  agent_id         String
+  turn_idx         Int
+  total_char_count Int
+  messages         messages[]
+  tool_meta        tool_meta?
+
+  @@id([repo_url, agent_role, agent_id, turn_idx])
+}
