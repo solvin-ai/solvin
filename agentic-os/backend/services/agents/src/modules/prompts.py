@@ -18,7 +18,7 @@ from typing import List, Any, Optional
 from shared.config import config
 from shared.logger import logger
 from modules.agents_temp_registry import get_agent_role
-from modules.agent_context import get_current_agent
+from modules.agents_running import get_current_agent_tuple as get_current_agent
 from modules.unified_turn import UnifiedTurn
 
 

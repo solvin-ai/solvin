@@ -1,4 +1,5 @@
 # service_agents.py
+# service_agents.py
 
 import os
 import threading
@@ -15,6 +16,7 @@ from requests.exceptions import ReadTimeout, ConnectionError as ReqConnectionErr
 from modules.db import init_db
 from modules.run_agent_task import run_agent_task
 from modules.tasks import fetch_task_prompt
+from modules.agents_running import seed_agent  # <-- import seed_agent
 
 # -------------------------------------------------------------------
 # Tool registry cache (starts on startup, refreshes periodically)
@@ -208,50 +210,37 @@ def _claim_repo_loop():
             # merge full_info fields into our claim dict
             claim.update(full_info)
 
-            # Pull TASK_NAME out of config (might be empty string)
+            # Pull TASK_NAME out of config (must be non-empty)
             task_name = config.get("TASK_NAME", "").strip()
-            if task_name:
-                logger.info(f"Seeding root agent with TASK_NAME={task_name!r}")
+            assert task_name, "TASK_NAME must be set in config"
+            logger.info(f"Seeding root agent with TASK_NAME={task_name!r}")
 
             # ----------------------------------------------------------------
-            # SEED ROOT AGENT → now simply pass agent_id="001"
+            # SEED ROOT AGENT directly (no run_agent_task), passing TASK_NAME
             # ----------------------------------------------------------------
-            seed_resp = run_agent_task(
-                agent_role  = "root",
-                repo_url    = repo_url,
-                user_prompt = None,
-                agent_id    = "001",
-                repo_owner  = claim.get("repo_owner"),
-                repo_name   = claim.get("repo_name"),
+            root_id = seed_agent(
+                agent_role="root",
+                repo_url=repo_url,
+                agent_id="001",
+                user_prompt=task_name,
             )
-            if not seed_resp.get("success"):
-                logger.error("Failed to seed root agent: %s", seed_resp.get("task_result"))
-                # clear in-flight claim and retry later
-                CLAIMED_REPO_META["repo_url"]   = None
-                CLAIMED_REPO_META["repo_name"]  = None
-                CLAIMED_REPO_META["repo_owner"] = None
-                continue
+            logger.info(f"Seeded root agent id {root_id!r} for {repo_url!r}")
 
-            agent_id = seed_resp["agent_id"]
-            logger.info(f"Seeded root agent id {agent_id!r} for {repo_url!r}")
-
-            # record the claim for status/readiness endpoints
+            # record claim state
             repo_owner = claim.get("repo_owner")
             repo_name  = claim.get("repo_name")
             CLAIMED_REPO_META["repo_url"]   = repo_url
             CLAIMED_REPO_META["repo_name"]  = repo_name
             CLAIMED_REPO_META["repo_owner"] = repo_owner
 
-            # Now that we know task_name, fetch the actual user prompt text
-            user_prompt = ""
-            if task_name:
-                user_prompt = fetch_task_prompt(task_name) or ""
-                logger.info(f"Fetched task_prompt '{task_name}': {user_prompt!r}")
+            # Now fetch the actual user prompt text
+            user_prompt = fetch_task_prompt(task_name) or ""
+            logger.info(f"Fetched task_prompt '{task_name}': {user_prompt!r}")
 
             # Launch the processing thread
             _PROCESSING_THREAD = threading.Thread(
                 target=_process_repo,
-                args=(agent_id, repo_url, repo_owner, repo_name, user_prompt),
+                args=(root_id, repo_url, repo_owner, repo_name, user_prompt),
                 daemon=True,
             )
             _PROCESSING_THREAD.start()

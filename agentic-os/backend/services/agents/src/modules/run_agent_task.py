@@ -6,13 +6,18 @@ from typing import Optional, Dict, Any
 from modules.run_to_completion import run_to_completion as tools_run_to_completion
 from shared.logger import logger
 from shared.config import config
-from modules.agents_running import seed_agent, set_current_agent
+from modules.agents_running import (
+    seed_agent,
+    set_current_agent_tuple,
+    get_current_agent_tuple,
+)
+from modules.agent_call_graph import record_spawn
 
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Thread‐pool for all run_agent_task calls
-# ----------------------------------------------------------------
+# ----------------------------------------------------------------------------
 _MAX_AGENT_TASK_THREADS = int(config.get("MAX_AGENT_TASK_THREADS", "5"))
-_AGENT_TASK_EXECUTOR = ThreadPoolExecutor(
+_AGENT_TASK_EXECUTOR   = ThreadPoolExecutor(
     max_workers=_MAX_AGENT_TASK_THREADS,
     thread_name_prefix="run-agent-task-worker"
 )
@@ -26,41 +31,38 @@ def _worker(
     repo_name:    Optional[str],
 ) -> Dict[str, Any]:
     """
-    1) Seed (or re‐use) an agent:
-       - If agent_role == "root", always use ID "001".
-       - Otherwise, derive/use agent_id or user_prompt.
-    2) Mark that agent current.
-    3) If no user_prompt was provided, return immediately.
-    4) Otherwise, drive the run_to_completion loop.
+    1) Snapshot the parent agent
+    2) If parent.role == agent_role, reuse that agent_id
+       else seed_agent(...) → creates or reuses exactly one agent per role/repo
+       and record the spawn edge
+    3) Mark the chosen agent as current in this thread
+    4) Drive run_to_completion
+    5) Restore the parent agent before returning
     """
-    # 1) seed or reuse; special‐case "root"
-    if agent_role == "root":
-        local_agent_id = seed_agent(
-            agent_role=agent_role,
-            repo_url=repo_url,
-            agent_id="001",
-            user_prompt=None,
-        )
+    # 1) snapshot parent
+    parent = get_current_agent_tuple()  # type: ignore
+    parent_key = (parent[0], parent[1]) if parent else ("<none>", "<none>")
+
+    # 2) spawn or reuse
+    if parent and parent[0] == agent_role:
+        # already running this role, reuse it
+        local_agent_id = parent[1]
+        logger.debug(f"_worker: reusing existing {agent_role}:{local_agent_id}")
     else:
+        # must pass user_prompt here (caller responsibility)
         local_agent_id = seed_agent(
             agent_role=agent_role,
             repo_url=repo_url,
             agent_id=agent_id,
             user_prompt=user_prompt,
         )
+        record_spawn(parent_key, (agent_role, local_agent_id))
+        logger.debug(f"_worker: recorded spawn {parent_key} → {(agent_role, local_agent_id)}")
 
-    # 2) ensure request‐context is set
-    set_current_agent(agent_role, local_agent_id, repo_url)
+    # 3) mark current in this thread
+    set_current_agent_tuple(agent_role, local_agent_id, repo_url)
 
-    # 3) if caller only wanted to seed (no prompt), return now
-    if user_prompt is None:
-        return {
-            "success": True,
-            "agent_id": local_agent_id,
-            "task_result": None
-        }
-
-    # 4) Drive the agent through to completion via the Tools service
+    # 4) run to completion
     try:
         run_resp = tools_run_to_completion(
             agent_role=agent_role,
@@ -72,25 +74,32 @@ def _worker(
         )
     except Exception as e:
         logger.error("run_to_completion exception", exc_info=True)
-        return {
-            "success": False,
-            "agent_id": local_agent_id,
+        result = {
+            "success":     False,
+            "agent_id":    local_agent_id,
             "task_result": str(e),
         }
+    else:
+        if isinstance(run_resp, dict) and run_resp.get("errors"):
+            result = {
+                "success":     False,
+                "agent_id":    local_agent_id,
+                "task_result": run_resp["errors"],
+            }
+        else:
+            result = {
+                "success":     True,
+                "agent_id":    local_agent_id,
+                "task_result": run_resp.get("data"),
+            }
+    finally:
+        # 5) restore parent pointer
+        if parent:
+            set_current_agent_tuple(*parent)
+        else:
+            set_current_agent_tuple(None, None, None)
 
-    # 5) return success or errors
-    if isinstance(run_resp, dict) and run_resp.get("errors"):
-        return {
-            "success": False,
-            "agent_id": local_agent_id,
-            "task_result": run_resp["errors"]
-        }
-
-    return {
-        "success": True,
-        "agent_id": local_agent_id,
-        "task_result": run_resp.get("data")
-    }
+    return result
 
 def run_agent_task(
     agent_role:   str,
@@ -118,7 +127,7 @@ def run_agent_task(
     except Exception as e:
         logger.error("run_agent_task uncaught exception", exc_info=True)
         return {
-            "success": False,
-            "agent_id": None,
+            "success":     False,
+            "agent_id":    None,
             "task_result": str(e),
         }

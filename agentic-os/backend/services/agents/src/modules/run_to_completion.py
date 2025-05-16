@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from shared.logger import logger
 from shared.config import config
 
-from modules.agent_context import set_current_agent
+from modules.agents_running import set_current_agent_tuple as set_current_agent
 from modules.turns_list import (
     get_turns_list,
     add_turn_to_list,

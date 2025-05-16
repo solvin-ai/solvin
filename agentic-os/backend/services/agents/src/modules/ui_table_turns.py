@@ -19,7 +19,7 @@ from pprint import pformat
 
 from modules.unified_turn import UnifiedTurn, StrictDict
 from modules.turns_list import get_turns_list
-from modules.agent_context import get_current_agent
+from modules.agents_running import get_current_agent_tuple as get_current_agent
 from shared.config import config
 
 # Import centralized Rich table helpers.

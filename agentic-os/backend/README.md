@@ -8,7 +8,7 @@ $ git config --global user.email "you@example.com"
 $ git config --global user.name "Your Name"
 $ git config --global credential.helper store
 
-$ sudo apt install -y python3 python3.12-venv pipx expect tree python3-pip
+$ sudo apt install -y python3 python3.12-venv pipx expect tree python3-pip graphviz
 
 $ mkdir -p ~/dev ; cd ~/dev 
 $ git clone https://github.com/solvin-ai/solvin.git

@@ -3,7 +3,6 @@
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from modules.agent_context import get_current_agent
 from modules.db_turns    import (
     load_turns                as _load_turns,
     save_turns                as _save_turns,
@@ -239,6 +238,8 @@ def get_turns_list(
     repo_url:   Optional[str] = None
 ) -> List[UnifiedTurn]:
     if not (agent_role and agent_id and repo_url):
+        # defer import to avoid circular dependency
+        from modules.agents_running import get_current_agent_tuple as get_current_agent
         agent_role, agent_id, repo_url = get_current_agent()
     return TurnHistory.get(agent_role, agent_id, repo_url).turns
 
@@ -308,6 +309,8 @@ def get_turns_metadata(
     Return the metadata dict for this conversation.
     """
     if not (agent_role and agent_id and repo_url):
+        # defer import to avoid circular dependency
+        from modules.agents_running import get_current_agent_tuple as get_current_agent
         agent_role, agent_id, repo_url = get_current_agent()
     return TurnHistory.get(agent_role, agent_id, repo_url).get_metadata()
 

@@ -3,7 +3,7 @@
 from modules.ui_table_turns import print_turns_table
 from modules.ui_table_api import print_api_table
 from modules.ui_table_deletions import print_deletions_table
-from modules.ui_table_agents import print_agents_table, print_call_stack_table
+from modules.ui_table_agents import print_agents_table, print_call_graph_table
 
 def print_all_tables():
     """
@@ -15,7 +15,7 @@ def print_all_tables():
     print()
     print_agents_table()
     print()
-    print_call_stack_table()
+    print_call_graph_table()
     print()
     print_api_table()
     print()

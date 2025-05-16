@@ -22,7 +22,7 @@ import json
 from modules.unified_turn import UnifiedTurn
 from modules.turns_outbound import convert_unified_turn_to_api_message
 from modules.turns_list import get_turns_list
-from modules.agent_context import get_current_agent
+from modules.agents_running import get_current_agent_tuple as get_current_agent
 
 # Import centralized Rich helpers.
 from modules.ui_tables_common import (

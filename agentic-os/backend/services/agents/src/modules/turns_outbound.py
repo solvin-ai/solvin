@@ -13,7 +13,7 @@ All history lookups are now scoped by the full
 
 from modules.unified_turn import UnifiedTurn
 from modules.turns_list  import get_turns_list
-from modules.agent_context import get_current_agent
+from modules.agents_running import get_current_agent_tuple as get_current_agent
 
 
 def _normalize_raw_message(raw: dict, tool_name: str) -> dict:
@@ -108,7 +108,7 @@ def convert_unified_turn_to_api_message(unified_turn: UnifiedTurn) -> dict:
 if __name__ == "__main__":
     # Demo / smoke test
     import json
-    from modules.agent_context import set_current_agent
+    from modules.agents_running import set_current_agent_tuple as set_current_agent
 
     set_current_agent("root", "001", "demo_repo")
 

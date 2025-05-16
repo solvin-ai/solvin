@@ -85,7 +85,7 @@ def apply_pending_deletions(turns_list, current_turn: int, message_logs=None):
 
                     # directly remove this turn from history (in-memory + DB)
                     from modules.turns_list    import remove_turn_from_list
-                    from modules.agent_context import get_current_agent
+                    from modules.agents_running import get_current_agent_tuple as get_current_agent
 
                     agent_role, agent_id, repo_url = get_current_agent()
                     remove_turn_from_list(

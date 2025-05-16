@@ -38,13 +38,13 @@ def print_json_result(func, *args, **kwargs):
         typer.secho(f"ERROR: Unexpected error: {e}", fg="red", err=True)
         raise typer.Exit(99)
 
+
 def echo_agent_table(agents):
     """Pretty print agent listing as a table."""
     if not agents:
         typer.echo("(no running agents)")
         return
 
-    # always show role & id, add repo_url/created_at if present
     fields = ["agent_role", "agent_id"]
     if any("repo_url" in a for a in agents):
         fields.append("repo_url")
@@ -57,6 +57,7 @@ def echo_agent_table(agents):
     for a in agents:
         row = "  ".join(str(a.get(f, ""))[:32].ljust(14) for f in fields)
         typer.echo(row)
+
 
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
@@ -118,12 +119,51 @@ def set_current(
         repo_url
     )
 
-@app.command("stack")
-def stack(
-    repo_url:  str = typer.Option(..., "--repo-url", "-r", help="Repository URL to scope the query"),
+@app.command("graph")
+def graph(
+    format:     str = typer.Option("json", "--format", "-f", 
+                    help="Output format", show_choices=True, 
+                    case_sensitive=False, 
+                    # choices not supported by older typer; validate manually below
+                ),
 ):
-    """Show the full agent stack for the given repo and task."""
-    print_json_result(client_agents.get_agent_stack, repo_url)
+    """
+    Retrieve the global agent spawn graph.
+    format=json     → JSON list of edges [[p_role,p_id],[c_role,c_id],...]
+    format=mermaid  → Mermaid sequenceDiagram DSL
+    format=graphviz → Graphviz DOT source
+    """
+    fmt = format.lower()
+    if fmt not in ("json", "mermaid", "graphviz"):
+        typer.secho(f"ERROR: Unknown format '{format}'", fg="red", err=True)
+        raise typer.Exit(1)
+
+    try:
+        resp = client_agents.get_agent_call_graph(fmt)
+    except requests.exceptions.ConnectionError:
+        typer.secho(
+            "ERROR: Agents service is unreachable (connection refused). Is it running?",
+            fg="red", err=True
+        )
+        raise typer.Exit(1)
+    except requests.exceptions.HTTPError as e:
+        typer.secho(f"ERROR: HTTP error from server: {e}", fg="red", err=True)
+        try:
+            err = e.response.json()
+            typer.secho(json.dumps(err, indent=2), fg="red", err=True)
+        except Exception:
+            pass
+        raise typer.Exit(2)
+    except Exception as e:
+        typer.secho(f"ERROR: Unexpected error: {e}", fg="red", err=True)
+        raise typer.Exit(99)
+
+    data = resp.get("data")
+    if fmt == "json":
+        typer.echo(json.dumps(data, indent=2))
+    else:
+        # mermaid or graphviz → raw string
+        typer.echo(data)
 
 
 #
@@ -249,13 +289,13 @@ def broadcast(
     """
     roles = [r.strip() for r in agent_roles.split(",") if r.strip()]
     try:
-        messages = json.loads(messages_json)
+        msgs = json.loads(messages_json)
     except Exception:
-        messages = messages_json
+        msgs = messages_json
     print_json_result(
         client_agents.broadcast_to_agents,
         roles,
-        messages,
+        msgs,
         repo_url=repo_url,
     )
 

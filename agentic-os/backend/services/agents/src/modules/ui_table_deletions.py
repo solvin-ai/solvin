@@ -17,7 +17,7 @@ This module now uses the shared Rich-based table helpers defined in ui_tables_co
 
 from modules.ui_tables_common import get_console, create_rich_table, add_rows_with_separator
 from modules.turns_list import get_turns_list
-from modules.agent_context import get_current_agent
+from modules.agents_running import get_current_agent_tuple as get_current_agent
 
 
 def print_deletions_table():
