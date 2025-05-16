@@ -7,16 +7,19 @@ Supports multiple simultaneous tool invocations:
   - Wraps LLM output via centralized logic in unified_turn.py.
   - Extracts *all* tool_calls, enforces schema, computes hashes.
   - Returns lists "tools" and "tools_meta" rather than singletons.
-  - Fetches the tools registry via shared.client_tools (tools_list + tools_info).
+  - Fetches the tools registry via modules.tool_registry_cache.get_tools_registry().
 """
 
 import json
+import logging
 from pprint import pformat
 
 from shared.logger import logger
 from modules.unified_turn import _wrap_message, Role
 from modules.turns_utils import parse_tool_arguments, compute_md5_hash
-from shared.client_tools import tools_info, tools_list
+
+# instead of tools_info/tools_list, we get the registry from our cache
+from modules.tool_registry_cache import get_tools_registry
 
 
 def _filter_args_by_schema(input_args, json_schema):
@@ -50,35 +53,27 @@ def parse_api_response(api_response, tools_registry=None):
       - tools_meta:       list of metadata dicts (one per tool_call)
       - total_char_count: int
       - turn_meta:        { invocation_reason?: str, turns_to_purge: list[int] }
-
-    tools_registry may be passed in; if None, we fetch it via
-    shared.client_tools.tools_list() + tools_info().
     """
     logger.debug("ENTER parse_api_response() with api_response: %s", pformat(api_response))
 
-    # 1) Fetch or reuse the tools registry
     assistant_raw = api_response.get("assistant", {}) or {}
 
+    # 1) Fetch or reuse the tools registry (cached)
     if tools_registry is None:
-        tcalls = assistant_raw.get("tool_calls") or []
-        if isinstance(tcalls, list) and tcalls:
-            toolnames = []
-            for tc in tcalls:
-                fn = tc.get("function") if isinstance(tc.get("function"), dict) else tc
-                name = fn.get("name", "")
-                if name:
-                    toolnames.append(name)
+        tools_registry = get_tools_registry()
+
+    # 1a) Log a brief summary of the registry, not the full dump
+    if logger.isEnabledFor(logging.DEBUG):
+        if isinstance(tools_registry, dict) and "name" in tools_registry:
+            entries = [tools_registry]
+        elif isinstance(tools_registry, dict):
+            entries = list(tools_registry.values())
+        elif isinstance(tools_registry, list):
+            entries = tools_registry
         else:
-            toolnames = [t["tool_name"] for t in tools_list()]
-
-        tools_registry = tools_info(tool_names=toolnames)
-
-    # DEBUG: show raw registry shape
-    logger.debug(
-        "Raw tools_registry object (%s): %s",
-        type(tools_registry).__name__,
-        pformat(tools_registry)
-    )
+            entries = []
+        names = [e.get("name") for e in entries if isinstance(e, dict) and "name" in e]
+        logger.debug("tools_registry contains %d entries: %s", len(names), names)
 
     # 2) Wrap assistant message
     assistant_envelope = _parse_assistant_message(assistant_raw)
@@ -91,7 +86,7 @@ def parse_api_response(api_response, tools_registry=None):
     tools_env = []
     tools_meta = []
 
-    # Pre‐flatten registry: single‐dict vs. mapping vs. list
+    # Pre-flatten registry for lookup
     if isinstance(tools_registry, dict) and "name" in tools_registry:
         flat_registry = [tools_registry]
     elif isinstance(tools_registry, dict):
@@ -102,6 +97,7 @@ def parse_api_response(api_response, tools_registry=None):
         flat_registry = []
 
     for tool_call in tcalls:
+        # normalize call object
         if isinstance(tool_call.get("function"), dict):
             call_obj = tool_call["function"]
         else:
@@ -205,7 +201,6 @@ def parse_api_response(api_response, tools_registry=None):
         t["meta"]["char_count"] for t in tools_env
     )
 
-    # build core outbound payload
     outbound = {
         "assistant":        assistant_envelope,
         "tools":            tools_env,
@@ -219,18 +214,14 @@ def parse_api_response(api_response, tools_registry=None):
     all_turns_to_purge = []
     for m in tools_meta:
         args = m.get("input_args", {})
-        # grab the first invocation_reason we see
         if invocation_reason is None and isinstance(args.get("invocation_reason"), str):
             invocation_reason = args["invocation_reason"]
-        # collect any turns_to_purge lists
         ttp = args.get("turns_to_purge")
         if isinstance(ttp, list):
             all_turns_to_purge.extend([t for t in ttp if isinstance(t, int)])
 
-    # dedupe & sort
     turns_to_purge = sorted(set(all_turns_to_purge))
 
-    # attach to outbound so downstream code can pick it up
     outbound["turn_meta"] = {
         "invocation_reason": invocation_reason,
         "turns_to_purge":    turns_to_purge,

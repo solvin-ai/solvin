@@ -8,7 +8,7 @@ import Header from "../../components/Header";
 function humanizeSnakeCase(name) {
   return name
     .split("_")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
 
@@ -54,6 +54,13 @@ export default function AgentTypesPage() {
   const [leftSelected, setLeftSelected] = useState([]);
   const [rightSelected, setRightSelected] = useState([]);
 
+  // --- Build a fast lookup: modelSupports[id] = boolean ---
+  const modelSupports = {};
+  models.forEach((m) => {
+    // assume your /api/models returns a boolean `supports_reasoning` on each model
+    modelSupports[m.id] = !!m.supports_reasoning;
+  });
+
   // Fetch agent roles list
   useEffect(() => {
     fetchAgentTypes();
@@ -82,7 +89,7 @@ export default function AgentTypesPage() {
       .catch((e) => console.error("Error fetching tools:", e));
   }, []);
 
-  // Fetch models
+  // Fetch models (with supports_reasoning flag)
   useEffect(() => {
     fetch("/api/models?withProviders=1")
       .then((r) => r.json())
@@ -138,17 +145,17 @@ export default function AgentTypesPage() {
           parsedTools = JSON.parse(agent.allowed_tools || "[]");
         }
       } catch {}
+
       parsedTools = ensureDefaultTool(parsedTools);
 
       setEditingAgent(agent);
       setFormData({
         agent_role: agent.agent_role,
         agent_description: agent.agent_description || "",
-        default_developer_prompt:
-          agent.default_developer_prompt || "",
+        default_developer_prompt: agent.default_developer_prompt || "",
         default_user_prompt: agent.default_user_prompt || "",
         model_id: agent.model_id || "",
-        reasoning_level: agent.reasoning_level || "medium",
+        reasoning_level: agent.reasoning_level || "",
         tool_choice: agent.tool_choice || "auto",
         allowed_tools: parsedTools,
       });
@@ -189,18 +196,14 @@ export default function AgentTypesPage() {
   function addSelected() {
     setFormData((f) => ({
       ...f,
-      allowed_tools: Array.from(
-        new Set([...f.allowed_tools, ...leftSelected])
-      ),
+      allowed_tools: Array.from(new Set([...f.allowed_tools, ...leftSelected])),
     }));
     setLeftSelected([]);
   }
   function removeSelected() {
     setFormData((f) => ({
       ...f,
-      allowed_tools: f.allowed_tools.filter(
-        (t) => !rightSelected.includes(t)
-      ),
+      allowed_tools: f.allowed_tools.filter((t) => !rightSelected.includes(t)),
     }));
     setRightSelected([]);
   }
@@ -303,10 +306,7 @@ export default function AgentTypesPage() {
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                     value={formData.agent_role}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        agent_role: e.target.value,
-                      })
+                      setFormData({ ...formData, agent_role: e.target.value })
                     }
                   />
                 </div>
@@ -370,12 +370,16 @@ export default function AgentTypesPage() {
                   <select
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                     value={formData.model_id}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        model_id: e.target.value,
-                      })
-                    }
+                    onChange={(e) => {
+                      const newModelId = e.target.value;
+                      const supports = modelSupports[newModelId];
+                      setFormData((f) => ({
+                        ...f,
+                        model_id: newModelId,
+                        // clear reasoning if not supported
+                        reasoning_level: supports ? f.reasoning_level : "",
+                      }));
+                    }}
                   >
                     <option value="">— Select Model —</option>
                     {models.map((m) => (
@@ -392,13 +396,17 @@ export default function AgentTypesPage() {
                   <select
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                     value={formData.reasoning_level}
+                    disabled={
+                      !formData.model_id || !modelSupports[formData.model_id]
+                    }
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
+                      setFormData((f) => ({
+                        ...f,
                         reasoning_level: e.target.value,
-                      })
+                      }))
                     }
                   >
+                    <option value="">— N/A —</option>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
@@ -416,8 +424,7 @@ export default function AgentTypesPage() {
                       setFormData((f) => ({
                         ...f,
                         tool_choice: tc,
-                        allowed_tools:
-                          tc === "none" ? [] : f.allowed_tools,
+                        allowed_tools: tc === "none" ? [] : f.allowed_tools,
                       }));
                     }}
                   >
@@ -456,9 +463,7 @@ export default function AgentTypesPage() {
                       </li>
                     ))}
                     {availableList.length === 0 && (
-                      <li className="text-gray-500">
-                        No tools available
-                      </li>
+                      <li className="text-gray-500">No tools available</li>
                     )}
                   </ul>
 
@@ -510,9 +515,7 @@ export default function AgentTypesPage() {
                       </li>
                     ))}
                     {formData.allowed_tools.length === 0 && (
-                      <li className="text-gray-500">
-                        No tools selected
-                      </li>
+                      <li className="text-gray-500">No tools selected</li>
                     )}
                   </ul>
                 </div>
@@ -598,7 +601,7 @@ export default function AgentTypesPage() {
                             : "—"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {a.reasoning_level}
+                          {a.reasoning_level || "—"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {a.tool_choice}

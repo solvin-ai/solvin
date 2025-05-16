@@ -17,6 +17,15 @@ from modules.run_agent_task import run_agent_task
 from modules.tasks import fetch_task_prompt
 
 # -------------------------------------------------------------------
+# Tool registry cache (starts on startup, refreshes periodically)
+# -------------------------------------------------------------------
+from modules.tool_registry_cache import (
+    start_tool_registry_cache_thread,
+    get_tools_registry,
+    stop_tool_registry_cache_thread,
+)
+
+# -------------------------------------------------------------------
 # Optional hard-halt on uncaught thread exceptions
 # -------------------------------------------------------------------
 ENABLE_EXCEPTION_HALT = os.environ.get("SOLVIN_EXCEPTION_HALT", "").lower() in ("1", "true", "yes")
@@ -263,12 +272,33 @@ def _on_startup():
     init_db()
     logger.info("DB schema ensured (tables created if missing).")
 
+    # Start the background cache refresher for the tool registry
+    start_tool_registry_cache_thread(refresh_interval=300)  # refresh every 5 minutes
+
+    # Warm the registry immediately so first parse is fast
+    reg = get_tools_registry()
+    count = len(reg) if hasattr(reg, "__len__") else -1
+    names = [
+        e.get("name")
+        for e in (reg.values() if isinstance(reg, dict) else reg)
+        if isinstance(e, dict) and "name" in e
+    ]
+    logger.info("Warmed tool registry with %d entries: %s", count, names)
+
     if DISABLE_REPO_CLAIM:
         logger.info("Repo-claim loop disabled by config.")
     else:
         t = threading.Thread(target=_claim_repo_loop, daemon=True)
         t.start()
         logger.info("Started background repo-claim thread.")
+
+# -------------------------------------------------------------------
+# Shutdown event
+# -------------------------------------------------------------------
+@app.on_event("shutdown")
+def _on_shutdown():
+    stop_tool_registry_cache_thread()
+    logger.info("Stopped tool registry refresh thread.")
 
 # -------------------------------------------------------------------
 # Include routers under versioned prefix

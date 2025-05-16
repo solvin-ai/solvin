@@ -40,8 +40,8 @@ echo "Detected login shell: $shell_name → will use $ACTIVATE_SCRIPT"
 SERVICES=(
   "configs 8010 SERVICE_URL_CONFIGS=http://localhost:8010"
   "repos   8002"
-  "agents  8000"
   "tools   8001"
+  "agents  8000"
 )
 
 echo "==== Services to be launched ===="

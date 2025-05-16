@@ -46,9 +46,20 @@ function makeBlankAgent(agent_role) {
     default_user_prompt: "",
     model_id: null,
     model_name: "",
-    reasoning_level: "medium",
+    reasoning_level: "",
     tool_choice: "auto",
   };
+}
+
+/**
+ * Given a model_id and a stored reasoning_level, return either
+ * the stored value (if the model supports reasoning) or "".
+ */
+async function normalizeReasoningLevel(model_id, storedLevel) {
+  if (!model_id) return "";
+  const m = await modelManager.getModelById(model_id);
+  const supports = m?.supports_reasoning ?? false;
+  return supports ? storedLevel : "";
 }
 
 export default async function handler(req, res) {
@@ -64,25 +75,33 @@ export default async function handler(req, res) {
         if (row) {
           // existing agent → parse tools & inject default
           const {
-            id,
             default_user_prompt,
             allowed_tools: toolsJson,
+            reasoning_level: storedLevel,
             ...rest
           } = row;
           const tools = ensureDefaultTool(parseTools(toolsJson));
 
           // look up model_name if model_id is set
-          let modelName = "";
+          let model_name = "";
           if (rest.model_id) {
             const m = await modelManager.getModelById(rest.model_id);
-            modelName = m?.model_name || "";
+            model_name = m?.model_name || "";
           }
+
+          // normalize reasoning_level
+          const reasoning_level = await normalizeReasoningLevel(
+            rest.model_id,
+            storedLevel
+          );
 
           return res.status(200).json({
             agent: {
               ...rest,
+              default_user_prompt,
               allowed_tools: tools,
-              model_name: modelName,
+              model_name,
+              reasoning_level,
             },
           });
         }
@@ -102,21 +121,35 @@ export default async function handler(req, res) {
     // 2) No agent_role → list all agent-types
     try {
       const rows = await agentManager.listAgentTypes();
-      // for each row, parse tools and lookup model_name
+      // for each row, parse tools, lookup model_name, normalize reasoning
       const agentTypes = await Promise.all(
-        rows.map(async ({ id, default_user_prompt, allowed_tools: toolsJson, ...rest }) => {
-          const tools = ensureDefaultTool(parseTools(toolsJson));
-          let modelName = "";
-          if (rest.model_id) {
-            const m = await modelManager.getModelById(rest.model_id);
-            modelName = m?.model_name || "";
+        rows.map(
+          async ({
+            allowed_tools: toolsJson,
+            reasoning_level: storedLevel,
+            ...rest
+          }) => {
+            const tools = ensureDefaultTool(parseTools(toolsJson));
+
+            let model_name = "";
+            if (rest.model_id) {
+              const m = await modelManager.getModelById(rest.model_id);
+              model_name = m?.model_name || "";
+            }
+
+            const reasoning_level = await normalizeReasoningLevel(
+              rest.model_id,
+              storedLevel
+            );
+
+            return {
+              ...rest,
+              allowed_tools: tools,
+              model_name,
+              reasoning_level,
+            };
           }
-          return {
-            ...rest,
-            allowed_tools: tools,
-            model_name: modelName,
-          };
-        })
+        )
       );
       return res.status(200).json({ agentTypes });
     } catch (err) {

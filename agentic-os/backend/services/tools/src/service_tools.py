@@ -9,7 +9,8 @@ from shared.logger import logger
 # registry initialization
 from modules.tools_registry import initialize_global_registry
 
-# JetStream responder
+# JetStream init & responder
+from modules.tools_jetstream_init import get_jetstream
 from modules.tools_jetstream_sub import run_responder
 
 # -------------------------------------------------------------------
@@ -50,9 +51,23 @@ app = FastAPI(
 
 @app.middleware("http")
 async def count_requests(request: Request, call_next):
+    """
+    Simple counter of total HTTP requests.
+    """
     global API_REQUESTS
     API_REQUESTS += 1
     return await call_next(request)
+
+@app.middleware("http")
+async def log_request_times(request: Request, call_next):
+    """
+    Log total time taken by each HTTP request.
+    """
+    t0 = time.monotonic()
+    response = await call_next(request)
+    elapsed = (time.monotonic() - t0) * 1000
+    logger.debug("HTTP %s %s completed in %.1fms", request.method, request.url.path, elapsed)
+    return response
 
 # -------------------------------------------------------------------
 # start & stop the JetStream responder in the same event loop
@@ -62,24 +77,36 @@ _responder_task: asyncio.Task | None = None
 @app.on_event("startup")
 async def _start_jetstream_responder():
     """
-    Launch the JetStream request-to-response responder
-    as a background task on startup.
+    1) Warm up the JetStream client (connect & ensure stream exists)
+    2) Launch the request‐to‐response responder as a background task.
     """
     global _responder_task
-    logger.info("Starting JetStream responder task...")
+
+    # 1) Warm‐up
+    logger.info("Warming up JetStream client…")
+    t0 = time.monotonic()
+    try:
+        await get_jetstream()
+        logger.info("JetStream client warmed up in %.1fms", (time.monotonic() - t0) * 1000)
+    except Exception as e:
+        logger.error("JetStream warm‐up failed: %s", e, exc_info=True)
+        raise
+
+    # 2) Start responder
+    logger.info("Starting JetStream responder task…")
     _responder_task = asyncio.create_task(run_responder())
-    # slight delay to let it connect
+    # slight delay to let the responder subscribe
     await asyncio.sleep(0.1)
     logger.info("JetStream responder started.")
 
 @app.on_event("shutdown")
 async def _stop_jetstream_responder():
     """
-    Cancel the responder task cleanly on shutdown.
+    Cancel the JetStream responder task cleanly on shutdown.
     """
     global _responder_task
     if _responder_task:
-        logger.info("Shutting down JetStream responder...")
+        logger.info("Shutting down JetStream responder…")
         _responder_task.cancel()
         try:
             await _responder_task

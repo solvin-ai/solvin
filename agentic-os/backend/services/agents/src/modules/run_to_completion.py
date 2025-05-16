@@ -9,8 +9,6 @@ only exit once set_work_completed is successfully invoked (i.e. not rejected).
 
 import time
 import sys
-import threading
-import requests
 
 from fastapi import HTTPException
 from shared.logger import logger
@@ -26,53 +24,10 @@ from modules.turns_single_run import run_single_turn
 from modules.turns_processor import handle_context_violation
 from modules.agents_temp_registry import get_agent_role as _fetch_agent_entry
 
-
-# ----------------------------------------------------------------
-# Cache full tool registry (fetch once per process)
-# ----------------------------------------------------------------
-_FULL_TOOL_REGISTRY = None
-_REGISTRY_LOCK = threading.Lock()
-
-
-def _get_full_tool_registry() -> dict:
-    """
-    Fetch (and cache) the full tool registry—combining tools_list() + tools_info(meta+schema).
-    """
-    global _FULL_TOOL_REGISTRY
-    if _FULL_TOOL_REGISTRY is None:
-        with _REGISTRY_LOCK:
-            if _FULL_TOOL_REGISTRY is None:
-                from shared.client_tools import tools_list, tools_info
-
-                try:
-                    all_tools = tools_list()
-                    tool_names = [t["tool_name"] for t in all_tools]
-                except Exception as e:
-                    logger.error("run_to_completion: tools_list() failed: %s", e, exc_info=True)
-                    raise HTTPException(status_code=502, detail="Failed to fetch tools list")
-
-                try:
-                    _FULL_TOOL_REGISTRY = tools_info(
-                        tool_names=tool_names,
-                        meta=True,
-                        schema=True
-                    )
-                except requests.HTTPError as e:
-                    resp = e.response
-                    body = resp.request.body or b"<empty>"
-                    try:
-                        body = body.decode("utf-8")
-                    except Exception:
-                        body = str(body)
-                    logger.error(
-                        "run_to_completion: tools_info() → HTTP %d\nURL: %s\nREQUEST BODY:\n%s\nRESPONSE BODY:\n%s",
-                        resp.status_code, resp.url, body, resp.text,
-                    )
-                    raise HTTPException(status_code=502, detail="tools-info lookup failed")
-                except Exception as e:
-                    logger.error("run_to_completion: tools_info() crashed: %s", e, exc_info=True)
-                    raise HTTPException(status_code=502, detail="Failed to fetch tool info")
-    return _FULL_TOOL_REGISTRY
+# ----------------------------------------------------------------------------
+# Now relying on the shared, hot-reloading ToolRegistryCache singleton
+# ----------------------------------------------------------------------------
+from modules.tool_registry_cache import get_tools_registry
 
 
 def _run_to_completion_worker(
@@ -83,9 +38,6 @@ def _run_to_completion_worker(
     repo_name:   str = None,
     user_prompt: str = ""
 ) -> dict:
-    """
-    Internal worker that actually runs the conversation loop to completion.
-    """
     start_time = time.time()
 
     # 1) set current-agent context
@@ -127,9 +79,13 @@ def _run_to_completion_worker(
         add_turn_to_list(agent_role, agent_id, repo_url, user_turn)
 
     # 4) fetch full tool registry (cached)
-    full_registry = _get_full_tool_registry()
+    try:
+        full_registry = get_tools_registry()
+    except Exception as e:
+        logger.error("run_to_completion: failed to fetch cached tool registry: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="Failed to fetch tools registry")
 
-    # 5) fetch this agent-role’s registry entry (contains allowed_tools + optional model_name)
+    # 5) fetch this agent-role’s registry entry (contains allowed_tools + optional model_name + reasoning_level)
     agent_entry = _fetch_agent_entry(agent_role)
     if agent_entry is None:
         # guard against missing role
@@ -139,11 +95,9 @@ def _run_to_completion_worker(
         )
 
     # 5a) determine which LLM model to use
-    #     prefer the model_name from the agent registry; fallback to config
     model = agent_entry.model_name or config.get("LLM_MODEL", "gpt-4")
     logger.debug("Using LLM model_name = %s for agent_role = %s", model, agent_role)
 
-    # allowed_tools comes in as a List[str] on the Pydantic model
     allowed = set(agent_entry.allowed_tools)
 
     logger.debug("==== run_to_completion DEBUG ====")
@@ -219,7 +173,7 @@ def _run_to_completion_worker(
             turn_next += 1
             continue
 
-        # 8b) do one LLM+tool turn, passing model and repo_owner/repo_name through
+        # 8b) do one LLM+tool turn, passing model, repo_owner/repo_name and reasoning_effort through
         turn_next = run_single_turn(
             agent_role=agent_role,
             agent_id=agent_id,
@@ -227,7 +181,8 @@ def _run_to_completion_worker(
             unified_registry=unified_registry,
             model=model,
             repo_owner=repo_owner,
-            repo_name=repo_name
+            repo_name=repo_name,
+            reasoning_effort=agent_entry.reasoning_level,
         )
 
         # 8c) only stop when we see an accepted set_work_completed call
@@ -274,13 +229,13 @@ def run_to_completion(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 5:
+    if len(sys.argv) < 4:
         print("Usage: python run_to_completion.py <agent_role> <agent_id> <repo_url>")
         sys.exit(1)
 
-    role      = sys.argv[1]
-    agent_id  = sys.argv[2]
-    repo_url  = sys.argv[3]
+    role     = sys.argv[1]
+    agent_id = sys.argv[2]
+    repo_url = sys.argv[3]
 
     # Optional flags for --owner and --name
     owner = None

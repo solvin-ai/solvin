@@ -3,11 +3,9 @@
 """
 Turn-based rejection logic for message-centric agent stack.
 
-All tool registry access goes through shared.client_tools.
-No legacy tools_registry, no fallbacks, no defensive glue.
-
-Each check now expects (turn: UnifiedTurn, config: dict, turns: list, unified_registry: dict).
-If a particular check does not need one or more of those parameters it should ignore them.
+Registry access now goes through the in‐process cache (modules/tool_registry_cache.py).
+Each check still accepts (turn, config, turns, unified_registry) but if you pass
+unified_registry=None (or omit it) it will be fetched from the cache.
 """
 
 import json
@@ -15,9 +13,7 @@ from pprint import pformat
 from shared.logger import logger
 from modules.turns_utils import get_normalized_file_key
 from shared.config import config
-from shared.client_tools import tools_info
-
-# Stateless utility, no global registry allowed
+from modules.tool_registry_cache import get_tools_registry
 
 def validate_build_status(tool_invocations_log, tool_name, config):
     build_logs = [entry for entry in tool_invocations_log
@@ -247,11 +243,14 @@ def _check_reject_useless(turn, config, turns, unified_registry):
 def _check_reject_other(turn, config, turns, unified_registry):
     return False
 
-def check_rejection(turn_id, turns, unified_registry):
+def check_rejection(turn_id, turns, unified_registry=None):
     """
     Checks a UnifiedTurn (by turn_id in provided `turns` list) for possible rejections.
-    `unified_registry` is required and must come from shared.client_tools, not legacy.
+    If `unified_registry` is not passed, it will be fetched from the in-process cache.
     """
+    if unified_registry is None:
+        unified_registry = get_tools_registry()
+
     target_turn = None
     for t in turns:
         if t.turn_meta.get("turn") == turn_id:
@@ -261,28 +260,29 @@ def check_rejection(turn_id, turns, unified_registry):
         available_turns = sorted([t.turn_meta.get("turn") for t in turns])
         logger.debug("check_rejection: Turn %s not found. Available turns: %s", turn_id, available_turns)
         raise Exception(f"UnifiedTurn with turn number {turn_id} not found. Available turns: {available_turns}")
-    # All checks now operate in message-centric, explicit-registry mode:
+
     rejection_checks = [
-        (_check_reject_full, "reject-full"),
+        (_check_reject_full,    "reject-full"),
         (_check_reject_invalid, "reject-invalid"),
-        (_check_reject_denied, "reject-denied"),
-        (_check_reject_dup, "reject-dup"),
-        (_check_reject_blind, "reject-blind"),
-        (_check_reject_large, "reject-large"),
+        (_check_reject_denied,  "reject-denied"),
+        (_check_reject_dup,     "reject-dup"),
+        (_check_reject_blind,   "reject-blind"),
+        (_check_reject_large,   "reject-large"),
         (_check_reject_useless, "reject-useless"),
-        (_check_reject_other, "reject-other")
+        (_check_reject_other,   "reject-other"),
     ]
+
     for check_func, rej_type in rejection_checks:
         try:
-            # pass all required data explicitly, no globals allowed
             if check_func(target_turn, config, turns, unified_registry):
                 target_turn.tool_meta["rejection"] = rej_type
                 logger.info("Turn %s flagged with rejection: %s", turn_id, rej_type)
                 return target_turn
         except Exception as e:
             logger.error("Error in rejection check %s: %s", rej_type, e)
+
     return target_turn
 
 if __name__ == "__main__":
-    logger.info("Test: modules/turns_reject.py now fully message/registry-centric. No tools_registry is loaded or referenced.")
+    logger.info("Test: modules/turns_reject.py now fully cache‐centric for registry access.")
     # Add test calls here as needed to check rejection pathway

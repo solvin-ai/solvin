@@ -33,7 +33,8 @@ def run_single_turn(
     unified_registry: dict,
     model:            str,            # <--- now required
     repo_owner:       Optional[str] = None,
-    repo_name:        Optional[str] = None
+    repo_name:        Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> int:
     """
     Execute one LLM + tool invocation turn:
@@ -81,14 +82,15 @@ def run_single_turn(
     # 3d) Call the LLM API
     start = time.time()
     logger.debug(
-        "Turn %d: sending LLM request with %d messages and %d tools using model=%s",
-        turn_counter, len(messages), len(tools_metadata), model
+        "Turn %d: sending LLM request with %d messages and %d tools using model=%s (reasoning_effort=%s)",
+        turn_counter, len(messages), len(tools_metadata), model, reasoning_effort
     )
     assistant_response = get_assistant_response(
         model=model,
         messages=messages,
         tools_metadata=tools_metadata,
         tool_choice=config.get("TOOL_CHOICE", default="required"),
+        reasoning_effort=reasoning_effort,
     )
     execution_time = time.time() - start
 
@@ -152,6 +154,7 @@ if __name__ == "__main__":
         unified_registry=unified_registry_demo,
         model=MODEL,
         repo_owner="my-org",
-        repo_name="my-repo"
+        repo_name="my-repo",
+        reasoning_effort="high"
     )
     print("Next turn index:", next_turn)

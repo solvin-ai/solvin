@@ -46,6 +46,22 @@ class AgentRegistryItem(BaseModel):
             raise ValueError(f"allowed_tools must be list[str], got {v!r}")
         return v
 
+    @field_validator('reasoning_level', mode='before')
+    @classmethod
+    def _empty_reasoning_to_none(cls, v):
+        # normalize empty or all-whitespace strings to None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator('tool_choice', mode='before')
+    @classmethod
+    def _empty_tool_choice_to_none(cls, v):
+        # normalize empty or all-whitespace strings to None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
     # ----------------------------------------------------------------
     # Compatibility shim so you can treat this model like a dict:
     # ----------------------------------------------------------------
@@ -104,7 +120,7 @@ def upsert_agent_role(
     }
     if model_name is not None:
         payload["model_name"] = model_name
-    if reasoning_level is not None:
+    if reasoning_level:
         payload["reasoning_level"] = reasoning_level
     if tool_choice is not None:
         payload["tool_choice"] = tool_choice

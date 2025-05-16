@@ -28,23 +28,47 @@ async def _wait_for_response(reply_to: str, timeout: float) -> Dict[str, Any]:
     Connect to JetStream, subscribe to our per-request reply subject,
     await exactly one message, ack it, and return its parsed JSON body.
     """
+    # normalize URL
     nats_url = config.get("NATS_URL", "nats://localhost:4222")
     if nats_url.startswith("http://"):
         nats_url = "nats://" + nats_url[len("http://"):]
-    nc = NATS()
-    await nc.connect(servers=[nats_url])
-    js = nc.jetstream()
 
-    # ephemeral push-consumer on our unique reply subject
-    sub = await js.subscribe(reply_to)
+    logger.debug("[NATS] about to connect to %s", nats_url)
+    nc = NATS()
     try:
-        msg = await sub.next_msg(timeout=timeout)
-        body = json.loads(msg.data.decode())
-        await msg.ack()
-        return body
+        await nc.connect(servers=[nats_url])
+        logger.debug("[NATS] connected")
+
+        js = nc.jetstream()
+        logger.debug("[NATS] obtained jetstream context")
+
+        logger.debug("[NATS] subscribing to %s", reply_to)
+        sub = await js.subscribe(reply_to)
+        logger.debug("[NATS] subscription established, waiting for next message (timeout=%.1f)", timeout)
+
+        try:
+            msg = await sub.next_msg(timeout=timeout)
+            logger.debug("[NATS] message received on %s: %r", reply_to, msg.data)
+            await msg.ack()
+            logger.debug("[NATS] message acked")
+            body = json.loads(msg.data.decode())
+            return body
+
+        except asyncio.TimeoutError:
+            logger.error("[NATS] timed out waiting for a message on %s", reply_to)
+            raise
+
+        except Exception as e:
+            logger.error("[NATS] error while waiting for message: %s", e, exc_info=True)
+            raise
+
     finally:
-        # clean up the connection (unsubscribes and closes)
-        await nc.drain()
+        logger.debug("[NATS] draining/closing connection")
+        try:
+            await nc.drain()
+            logger.debug("[NATS] drain complete")
+        except Exception as e:
+            logger.error("[NATS] error during drain(): %s", e, exc_info=True)
 
 
 def execute_and_wait(
@@ -63,6 +87,11 @@ def execute_and_wait(
     2) Block until we get a pushed message on that inbox.
     3) Return the response dict in the expected shape, including turn_id.
     """
+    logger.debug(
+        "execute_and_wait ENTER tool=%s turn_id=%s repo=%s",
+        tool_name, turn_id, repo_url
+    )
+
     # ─── Add issue_title from TurnHistory.metadata into metadata ────────────
     conv_meta = get_turns_metadata(repo_url=repo_url)
     issue_title = conv_meta.get("issue_title")
@@ -73,6 +102,7 @@ def execute_and_wait(
     # 1) Create a per-request inbox subject
     base_resp = config.get("NATS_SUBJECT_EXEC_RESP", "tools.execute.response")
     reply_to = f"{base_resp}.{uuid4().hex}"
+    logger.debug("  → will enqueue with reply_to=%s", reply_to)
 
     # 2) Enqueue via HTTP, injecting reply_to and repo_url
     payload: Dict[str, Any] = {
@@ -87,10 +117,7 @@ def execute_and_wait(
     }
     try:
         ack = http_execute_tool(**payload)
-        logger.debug(
-            "Enqueued '%s' → stream=%s seq=%s reply_to=%s",
-            tool_name, ack.get("stream"), ack.get("seq"), reply_to
-        )
+        logger.debug("  → http_enqueue ack=%s", ack)
     except Exception as e:
         logger.error(
             "Failed to enqueue execution request for %s: %s",
@@ -100,7 +127,13 @@ def execute_and_wait(
 
     # 3) Wait for the single response from our private inbox
     to = timeout or config.get("TURN_EXEC_TIMEOUT", 10.0)
-    resp = _run_sync(_wait_for_response(reply_to, to))
+    logger.debug("  → about to block on NATS for %.1fs", to)
+    try:
+        resp = _run_sync(_wait_for_response(reply_to, to))
+        logger.debug("  → got back NATS response: %s", resp)
+    except Exception:
+        logger.error("execute_and_wait FAILED waiting for NATS response", exc_info=True)
+        raise
 
     # 4) Return the response, carrying through the original turn_id
     return {

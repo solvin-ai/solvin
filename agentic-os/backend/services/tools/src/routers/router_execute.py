@@ -1,5 +1,6 @@
 # routers/router_execute.py
 
+import time
 import json
 from typing import Optional, List, Dict, Any
 
@@ -36,23 +37,42 @@ class BulkExecuteRequest(BaseModel):
     summary="Publish a tool execution request to JetStream (non-blocking)"
 )
 async def execute_tool_nonblocking(request: ExecuteRequest):
+    t0_total = time.monotonic()
+    logger.debug("ENTER /tools/execute tool=%s turn_id=%s", request.tool_name, request.turn_id)
+
     registry = get_global_registry()
     if request.tool_name not in registry:
+        logger.debug("TOOL_NOT_FOUND %s", request.tool_name)
         raise HTTPException(status_code=404, detail=f"Tool '{request.tool_name}' not found")
 
-    try:
-        ack = await publish_exec_request(request.dict())
-    except Exception as e:
-        logger.error("Failed to enqueue execution request: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to enqueue execution request")
+    payload = request.dict()
+    logger.debug("Prepared payload keys=%s", list(payload.keys()))
 
-    return {
+    t0_pub = time.monotonic()
+    try:
+        ack = await publish_exec_request(payload)
+    except Exception as e:
+        t_pub_err = (time.monotonic() - t0_pub) * 1000
+        logger.error("publish_exec_request FAILED after %.1fms: %s", t_pub_err, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to enqueue execution request")
+    t_pub = (time.monotonic() - t0_pub) * 1000
+    logger.debug(
+        "publish_exec_request SUCCEEDED in %.1fms ack=(stream=%s, seq=%s)",
+        t_pub,
+        getattr(ack, "stream", None),
+        getattr(ack, "seq", None)
+    )
+
+    response = {
         "status": "ok",
         "data": {
             "stream": ack.stream,
             "seq": ack.seq,
         }
     }
+    t_total = (time.monotonic() - t0_total) * 1000
+    logger.debug("EXIT  /tools/execute total=%.1fms response=%s", t_total, response)
+    return response
 
 
 @router.post(
