@@ -11,98 +11,106 @@ from modules.tools_executor import execute_tool
 from modules.tools_registry import get_global_registry
 
 
-async def run_responder():
+async def _process_and_ack(msg):
     """
-    Durable PUSH‐consumer: for each JS‐request message,
-    offload the blocking execute_tool(...) into a thread,
-    publish to that message’s reply_to inbox,
-    then ACK the request so it’s removed from JetStream.
+    1) Run the (potentially long) execute_tool(...) in a thread.
+    2) Publish the result to the reply_to subject.
+    3) ACK the original request.
     """
-    js        = await get_jetstream()
-    req_sub   = config["NATS_SUBJECT_EXEC_REQ"]    # e.g. "tools.execute.request"
-    resp_pref = config["NATS_SUBJECT_EXEC_RESP"]   # e.g. "tools.execute.response"
-    durable   = config.get("NATS_CONSUMER_NAME", "TOOLS_EXEC_REQ")
+    # extract the sequence for logging
+    seq = getattr(msg.metadata, "stream_seq", None)
+    logger.debug("⇨ [responder] processing request #%s", seq)
 
-    async def _message_handler(msg):
-        # grab the stream sequence for logging
-        seq = None
-        try:
-            seq = msg.metadata.stream_seq
-        except Exception:
-            pass
+    try:
+        data = json.loads(msg.data.decode())
+        tool_name = data.get("tool_name")
+        reply_to  = data.get("reply_to") or config["NATS_SUBJECT_EXEC_RESP"]
 
-        logger.debug("⇨ [responder] got request #%s: %r", seq, msg.data)
+        # build args for execute_tool
+        exec_args = {
+            "tool_name":  tool_name,
+            "input_args": data.get("input_args", {}),
+            "repo_url":   data.get("repo_url"),
+            "repo_name":  data.get("repo_name"),
+            "repo_owner": data.get("repo_owner"),
+            "metadata":   data.get("metadata", {}),
+            "turn_id":    data.get("turn_id"),
+        }
 
-        try:
-            # 1) parse and extract fields
-            payload   = json.loads(msg.data.decode())
-            tool_name = payload.get("tool_name")
-            reply_to  = payload.pop("reply_to", resp_pref)
-
-            exec_args = {
-                "tool_name":  tool_name,
-                "input_args": payload.get("input_args", {}),
-                "repo_url":   payload.get("repo_url"),
-                "repo_name":  payload.get("repo_name"),
-                "repo_owner": payload.get("repo_owner"),
-                "metadata":   payload.get("metadata", {}),
-                "turn_id":    payload.get("turn_id"),
+        start = time.perf_counter()
+        if tool_name not in get_global_registry():
+            envelope = {
+                "status": "error",
+                "error": {
+                    "code":    "TOOL_NOT_FOUND",
+                    "message": f"Tool '{tool_name}' not registered"
+                }
             }
-
-            # 2) time the execution
-            start = time.perf_counter()
-
-            # 3) invoke the tool off the event loop
-            if tool_name not in get_global_registry():
+        else:
+            try:
+                # run the blocking work off the event loop
+                result = await asyncio.to_thread(execute_tool, **exec_args)
+                envelope = result
+            except Exception as ex:
+                logger.exception("Error executing tool %s", tool_name)
                 envelope = {
-                    "status": "error",
+                    "status": "failure",
                     "error": {
-                        "code":    "TOOL_NOT_FOUND",
-                        "message": f"Tool '{tool_name}' not registered"
+                        "code":    "EXECUTION_ERROR",
+                        "message": str(ex)
                     }
                 }
-            else:
-                try:
-                    result = await asyncio.to_thread(execute_tool, **exec_args)
-                    envelope = result
-                except Exception as ex:
-                    logger.exception("Error executing tool %s", tool_name)
-                    envelope = {
-                        "status": "failure",
-                        "error": {
-                            "code":    "EXECUTION_ERROR",
-                            "message": str(ex)
-                        }
-                    }
 
-            # 4) attach execution time metadata
-            envelope.setdefault("meta", {})
-            envelope["meta"]["exec_time"] = time.perf_counter() - start
+        # attach timing metadata
+        envelope.setdefault("meta", {})
+        envelope["meta"]["exec_time"] = time.perf_counter() - start
 
-            # 5) publish the response
-            await js.publish(reply_to, json.dumps(envelope).encode())
-            logger.debug("⇨ [responder] published response on %s", reply_to)
+        # publish the response
+        js = await get_jetstream()
+        await js.publish(reply_to, json.dumps(envelope).encode())
+        logger.debug("⇨ [responder] published response on %s for request #%s", reply_to, seq)
 
+    except Exception:
+        logger.exception("❌ unexpected error in message handler")
+
+    finally:
+        # ACK the original request so it's removed from the stream
+        try:
+            await msg.ack()
+            logger.debug("⇨ [responder] acked request #%s", seq)
         except Exception:
-            logger.exception("❌ unexpected error in message handler")
-
-        finally:
-            # 6) ACK the original request so it's removed from the stream
-            try:
-                await msg.ack()
-                logger.debug("⇨ [responder] acked request #%s", seq)
-            except Exception:
-                logger.exception("❌ failed to ack request #%s", seq)
+            logger.exception("❌ failed to ack request #%s", seq)
 
 
-    # subscribe with an async callback
-    await js.subscribe(
-        req_sub,
+async def run_responder():
+    """
+    1) Warm‐up JetStream (connect & ensure stream exists)
+    2) Pull‐subscribe to tools.execute.request with manual ack
+    3) For each incoming message, immediately create a task to handle it
+    4) Leave the coroutine alive so the consumer stays registered
+    """
+    logger.info("🤖 [responder] run_responder() starting")
+    js = await get_jetstream()
+    logger.info("🤖 [responder] obtained JetStream context")
+
+    subject = config["NATS_SUBJECT_EXEC_REQ"]    # typically "tools.execute.request"
+    durable = config.get("NATS_CONSUMER_NAME", "TOOLS_EXEC_REQ")
+
+    sub = await js.subscribe(
+        subject,
         durable=durable,
-        cb=_message_handler,
-        ack_wait=config.get("NATS_ACK_WAIT", 30_000_000_000)  # 30s in nanoseconds
+        manual_ack=True    # we will ack ourselves after processing
     )
-    logger.info("Responder listening on %s (durable=%s)", req_sub, durable)
+    logger.info(
+        "✅ [responder] subscribed on %s (durable=%s), entering message loop",
+        subject, durable
+    )
 
-    # keep the coroutine alive forever
+    # this loop will fire immediately for *every* message in the stream,
+    # regardless of how long other tasks take
+    async for msg in sub.messages:
+        # schedule each message independently
+        asyncio.create_task(_process_and_ack(msg))
+
+    # never returns
     await asyncio.Event().wait()

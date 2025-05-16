@@ -2,7 +2,7 @@
 
 """
 Database‐level helpers for managing running agents, the singleton “current” pointer,
-and a persistent call‐stack, all scoped by (repo_url).
+and a persistent call‐stack (with explicit parent links), all scoped by (repo_url).
 """
 
 import sqlite3
@@ -14,6 +14,7 @@ from modules.db import get_db
 def initialize_agents_db():
     """
     Create or migrate the agents_running, agents_current, and agent_call_stack tables.
+    (No in-place ALTER for parent columns—you must start with a fresh DB or manage migration separately.)
     """
     with get_db() as db:
         # 1) agents_running
@@ -49,21 +50,23 @@ def initialize_agents_db():
             if "repo_url" not in names2:
                 db.execute("ALTER TABLE agents_current ADD COLUMN repo_url TEXT NOT NULL DEFAULT '';")
 
-        # 3) agent_call_stack
+        # 3) agent_call_stack (now with explicit parent pointers)
         cols3 = db.execute("PRAGMA table_info(agent_call_stack)").fetchall()
         if not cols3:
             db.execute("""
             CREATE TABLE agent_call_stack (
-                repo_url   TEXT    NOT NULL,
-                stack_idx  INTEGER NOT NULL,
-                agent_role TEXT    NOT NULL,
-                agent_id   TEXT    NOT NULL,
-                pushed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                repo_url    TEXT    NOT NULL,
+                stack_idx   INTEGER NOT NULL,
+                agent_role  TEXT    NOT NULL,
+                agent_id    TEXT    NOT NULL,
+                parent_role TEXT,               -- new
+                parent_id   TEXT,               -- new
+                pushed_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY(repo_url,stack_idx)
             );
             """)
 
-# Run migrations at import time
+# Run migrations (or creations) at import time
 initialize_agents_db()
 
 
@@ -72,7 +75,7 @@ def generate_agent_id(
     repo_url:   str
 ) -> str:
     """
-    Return the next numeric agent_id (zero‐padded) for this role+repo+task.
+    Return the next numeric agent_id (zero‐padded) for this role+repo.
     """
     with get_db() as db:
         rows = db.execute(
@@ -110,7 +113,6 @@ def add_running_agent(
     If agent_id is provided, INSERT with that ID;
     otherwise auto-generate a fresh numeric ID.
     """
-    # decide on the ID to use
     aid = agent_id if agent_id is not None else generate_agent_id(agent_role, repo_url)
 
     with get_db() as db:
@@ -148,17 +150,11 @@ def clear_agents_for_repo(
     repo_url:  str
 ) -> None:
     """
-    Delete all running agents and the current pointer for the given repo+task.
+    Delete all running agents and the current pointer for the given repo.
     """
     with get_db() as db:
-        db.execute(
-            "DELETE FROM agents_running WHERE repo_url=?",
-            (repo_url,)
-        )
-        db.execute(
-            "DELETE FROM agents_current WHERE repo_url=?",
-            (repo_url,)
-        )
+        db.execute("DELETE FROM agents_running WHERE repo_url=?", (repo_url,))
+        db.execute("DELETE FROM agents_current  WHERE repo_url=?", (repo_url,))
 
 
 def load_current_agent_pointer() -> Optional[Tuple[str,str,str]]:
@@ -208,18 +204,38 @@ def push_call_stack(
     agent_id:   str
 ) -> None:
     """
-    Push a new entry onto the persistent call-stack for (repo_url).
+    Push a new entry onto the persistent call-stack for (repo_url),
+    recording an explicit parent_role/parent_id.
     """
     with get_db() as db:
-        mx = db.execute(
+        # find current top index
+        mx_row = db.execute(
             "SELECT MAX(stack_idx) AS mx FROM agent_call_stack WHERE repo_url=?",
             (repo_url,)
-        ).fetchone()["mx"]
+        ).fetchone()
+        mx = mx_row["mx"]
         next_idx = (mx + 1) if mx is not None else 0
+
+        # look up parent if present
+        if mx is not None:
+            top = db.execute(
+                "SELECT agent_role, agent_id FROM agent_call_stack "
+                "WHERE repo_url=? AND stack_idx=?",
+                (repo_url, mx)
+            ).fetchone()
+            parent_role, parent_id = top["agent_role"], top["agent_id"]
+        else:
+            parent_role = None
+            parent_id   = None
+
+        # insert with parent pointers
         db.execute(
-            "INSERT INTO agent_call_stack "
-            "(repo_url,stack_idx,agent_role,agent_id) VALUES (?,?,?,?)",
-            (repo_url, next_idx, agent_role, agent_id)
+            """
+            INSERT INTO agent_call_stack
+              (repo_url, stack_idx, agent_role, agent_id, parent_role, parent_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (repo_url, next_idx, agent_role, agent_id, parent_role, parent_id)
         )
 
 
@@ -255,15 +271,24 @@ def pop_call_stack(
 
 def load_call_stack(
     repo_url:  str
-) -> List[Tuple[str,str]]:
+) -> List[Tuple[str,str,Optional[str],Optional[str]]]:
     """
     Load the entire persistent call-stack for (repo_url) in order
-    from bottom (0) to top.
+    from bottom (0) to top, returning tuples of
+      (agent_role, agent_id, parent_role, parent_id).
     """
     with get_db() as db:
         rows = db.execute(
-            "SELECT agent_role, agent_id FROM agent_call_stack "
-            "WHERE repo_url=? ORDER BY stack_idx",
+            """
+            SELECT agent_role, agent_id, parent_role, parent_id
+              FROM agent_call_stack
+             WHERE repo_url=?
+             ORDER BY stack_idx
+            """,
             (repo_url,)
         ).fetchall()
-    return [(r["agent_role"], r["agent_id"]) for r in rows]
+
+    return [
+        (r["agent_role"], r["agent_id"], r["parent_role"], r["parent_id"])
+        for r in rows
+    ]

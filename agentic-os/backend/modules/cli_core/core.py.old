@@ -3,7 +3,6 @@
 import os
 import sys
 import logging
-
 import click
 import typer
 from typer import Context, Option
@@ -24,50 +23,41 @@ class BannerGroup(typer.core.TyperGroup):
 
     def format_help(self, ctx: Context, formatter: click.formatting.HelpFormatter):
         """
-        Always called whenever Click/Typer is rendering help
-        (via --help, no‐args, or after a parse error).
-        We show the banner *once* here, then defer to Click.
+        Always called when Click/Typer is about to render help,
+        whether via --help, no-args, or after a parse error.
+        We print our banner first, then let Click render into the formatter.
         """
         if sys.stdout.isatty():
             banner()
         super().format_help(ctx, formatter)
 
-    def get_command_help(self, ctx: Context) -> str:
-        """
-        Render and return *only* the help text for ctx.command,
-        bypassing our overridden format_help so we don’t print
-        the banner a second time.
-        """
-        fmt = click.formatting.HelpFormatter(width=80)
-        # Directly call the base Command.format_help, not our override:
-        click.core.Command.format_help(ctx.command, ctx, fmt)
-        return fmt.getvalue()
-
     def main(self, *args, **kwargs):
         """
-        Wrap Typer.main():
-          1) re-raise *all* click.ClickException (Exit, UsageError, MissingParameter, BadParameter…)
-             so that Click/Typer’s own machinery prints clean usage/help and exits with 0 or 2.
-          2) catch *other* Exceptions (import errors, JSON‐parse errors, your runtime bugs),
-             print the banner once, the error message, then the help stub, then exit(1).
+        Wrap the normal Typer main so that on parse errors we print
+        banner + error + help and exit(1).
         """
         try:
             return super().main(*args, **kwargs)
-        except click.ClickException:
-            # anything Click‐level: let Click handle it (help, usage errors, exit codes)
-            raise
-        except Exception as exc:
-            # truly unexpected error: one banner, one help
+        except click.ClickException as exc:
+            # re-raise normal Exit(0) (help, ctx.exit)
+            if isinstance(exc, click.exceptions.Exit):
+                raise
+            # on any other ClickException: banner + error + help + exit(1)
             if sys.stdout.isatty():
                 banner()
-            click.secho(f"Error: {exc}", fg="red", err=True)
-
-            ctx = click.get_current_context(silent=True)
-            if ctx is not None:
-                help_text = self.get_command_help(ctx)
-                click.echo(help_text, err=True)
-
+            exc.show()
+            sub_ctx = self.make_context(self.name, list(args), resilient_parsing=True)
+            click.echo(self.get_command_help(sub_ctx), err=True)
             sys.exit(1)
+
+    def get_command_help(self, ctx: Context) -> str:
+        """
+        Render and return the help text for ctx.command at ctx,
+        using a fixed-width formatter.
+        """
+        fmt = click.formatting.HelpFormatter(width=80)
+        super().format_help(ctx, fmt)
+        return fmt.getvalue()
 
 
 def global_callback(
@@ -77,14 +67,14 @@ def global_callback(
     no_banner: bool          = Option(False, "--no-banner",    help="Suppress banner"),
     timeout:   float | None  = Option(None,     "--timeout", "-t", help="Global HTTP timeout"),
 ):
-    # 0) SOLVIN_DEBUG environment variable
+    # 0) Check SOLVIN_DEBUG environment variable
     env = os.getenv("SOLVIN_DEBUG", "").lower()
     if not debug and env in ("1", "true", "yes"):
         debug = True
 
-    # 1) --debug turns on full traceback / logger.DEBUG
+    # 1) --debug or SOLVIN_DEBUG
     if debug:
-        import modules.cli_errorhandler as _errhdl  # defer to avoid cycle
+        import modules.cli_errorhandler as _errhdl  # defer import to avoid cycle
         logger.setLevel(logging.DEBUG)
         _errhdl.DEBUG = True
         logger.debug("DEBUG mode ON")
@@ -98,14 +88,14 @@ def global_callback(
         set_http_timeout(timeout)
         logger.debug("Global HTTP timeout set to %s seconds", timeout)
 
-    # 4) --version: show banner + version, then exit(0)
+    # 4) --version: print banner + version, then exit
     if version:
         if sys.stdout.isatty():
             banner()
         typer.echo(f"Solvin CLI v{VERSION}")
         raise typer.Exit()
 
-    # 5) invoked no subcommand at all: show banner + root help, then exit(0)
+    # 5) no subcommand: print banner + root help, then exit
     if ctx.invoked_subcommand is None:
         if sys.stdout.isatty():
             banner()

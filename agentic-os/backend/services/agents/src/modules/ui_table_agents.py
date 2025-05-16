@@ -3,7 +3,7 @@
 """
 Overview:
   This module prints a formatted "Agents Table" using Rich-based table infrastructure,
-  and also prints the current agent call-stack in its own table.
+  and also prints the current agent call-graph in its own table.
   Now supports per-task scoping: all agent and turn lookups include repo_url.
 """
 
@@ -11,7 +11,7 @@ from datetime import datetime
 from modules.agents_running import (
     list_running_agents,
     get_current_agent_tuple,
-    get_agent_stack
+    get_agent_stack,
 )
 from modules.turns_list import get_turns_list, get_turns_metadata
 from modules.unified_turn import UnifiedTurn
@@ -172,33 +172,43 @@ def print_agents_table():
 
 def print_call_stack_table():
     """
-    Prints the current agent call-stack using Rich.
+    Prints the current agent call-graph using Rich, including parent linkage.
     """
     console = get_console()
-    stack = get_agent_stack()  # returns list of dicts with repo_url, agent_role, agent_id
+    stack = get_agent_stack()  # returns list of dicts with repo_url, agent_role, agent_id, parent_role, parent_id
 
     if not stack:
-        console.print("[dim]Call stack is empty.[/dim]")
+        console.print("[dim]Call graph is empty.[/dim]")
         return
 
     columns = [
-        {"header": "Level",      "justify": "center", "style": "dim"},
-        {"header": "Repo URL",   "justify": "left"},
-        {"header": "Agent Role", "justify": "left"},
-        {"header": "Agent ID",   "justify": "left"},
+        {"header": "Level",        "justify": "center", "style": "dim"},
+        {"header": "Repo URL",     "justify": "left"},
+        {"header": "Agent Role",   "justify": "left"},
+        {"header": "Agent ID",     "justify": "left"},
+        {"header": "Parent Agent", "justify": "left"},
     ]
-    table = create_rich_table("Agent Call Stack (top first)", columns, compact=False)
+    table = create_rich_table("Agent Call Graph (top first)", columns, compact=False)
     table.expand = False
     for col in table.columns:
         col.padding = (0, 1)
 
     # top of stack first
     for level, entry in enumerate(reversed(stack), start=1):
+        # format parent agent as "role_id" or blank
+        parent_role = entry.get("parent_role")
+        parent_id   = entry.get("parent_id")
+        if parent_role and parent_id:
+            parent_str = f"{parent_role}_{parent_id}"
+        else:
+            parent_str = ""
+
         table.add_row(
             str(level),
             entry.get("repo_url", ""),
             entry.get("agent_role", ""),
             entry.get("agent_id", ""),
+            parent_str,
         )
 
     console.print(table)

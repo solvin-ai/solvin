@@ -4,21 +4,22 @@ import sys
 import json
 import requests
 import typer
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from shared.config import config
 config["SERVICE_NAME"] = "cli"
 
 from shared.logger import logger
-from modules.cli_core import banner
-
-# Import the new non‐blocking NATS/HTTP client methods
 from shared.client_tools import execute_tool as nats_execute_tool, execute_bulk as nats_execute_bulk
+
+from modules.cli_core import BannerGroup, banner
 
 API_VERSION = "v1"
 API_PREFIX  = f"/api/{API_VERSION}"
 
 app = typer.Typer(
+    cls=BannerGroup,
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -108,8 +109,9 @@ def main(
         tools_url = config.get("SERVICE_URL_TOOLS", default=default)
         ctx.obj   = {"api_url": tools_url}
 
-    if sys.stdout.isatty():
-        banner()
+    # You can print the banner here on every invocation if desired
+    # if sys.stdout.isatty():
+    #     banner()
 
 
 @app.command("health")
@@ -173,35 +175,59 @@ def cmd_info(
 def cmd_execute(
     tool_name: str,
     repo_name: str,
-    input_args_file: str = typer.Argument(..., help="JSON file with input args"),
+    input_args: Optional[str] = typer.Option(
+        None, "-j", "--input-args",
+        help="Raw JSON string for input args (e.g. '{\"text\":\"hello\"}')"
+    ),
+    input_file: Optional[Path] = typer.Option(
+        None, "-f", "--file",
+        exists=True, file_okay=True, dir_okay=False,
+        help="Path to JSON file containing input args"
+    ),
     repo_owner: Optional[str] = typer.Option(None, "--repo-owner", help="Optional repo owner"),
     metadata_file: Optional[str] = typer.Option(None, "--metadata-file", help="JSON file with metadata"),
     turn_id: Optional[str] = typer.Option(None, "--turn-id", help="Turn id"),
-    reply_to: Optional[str] = typer.Option(None, "--reply-to", help="Reply inbox (e.g. tools.execute.response.<uuid>)"),
+    reply_to: Optional[str] = typer.Option(None, "--reply-to", help="Reply inbox"),
 ):
     """
     Enqueue a tool execution request (non‐blocking) via NATS/HTTP.
+
+    You must supply exactly one of:
+      • --input-args  RAW_JSON  
+      • --file        PATH_TO_JSON
     """
-    try:
-        with open(input_args_file) as f:
-            input_args = json.load(f)
-    except Exception as e:
-        typer.secho(f"Error reading input args file: {e}", fg=typer.colors.RED, err=True)
+    # 1) validate mutually exclusive
+    if bool(input_args) == bool(input_file):
+        typer.secho("Error: must supply exactly one of --input-args or --file", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
+    # 2) load input_args_data
+    try:
+        if input_args is not None:
+            input_args_data = json.loads(input_args)
+        else:
+            with open(input_file, "r") as f:
+                input_args_data = json.load(f)
+    except Exception as e:
+        typer.secho(f"Error: cannot read/parse input args: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+    # 3) load optional metadata
     metadata: Optional[Dict[str, Any]] = None
     if metadata_file:
         try:
             with open(metadata_file) as mf:
                 metadata = json.load(mf)
         except Exception as e:
-            typer.secho(f"Error reading metadata file: {e}", fg=typer.colors.RED, err=True)
+            typer.secho(f"Error: cannot read metadata file '{metadata_file}': {e}",
+                        fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
 
+    # 4) dispatch to NATS/HTTP client
     try:
         result = nats_execute_tool(
             tool_name=tool_name,
-            input_args=input_args,
+            input_args=input_args_data,
             repo_url=repo_name,
             repo_name=repo_name,
             repo_owner=repo_owner,
@@ -227,7 +253,8 @@ def cmd_execute_bulk(
         with open(requests_file) as f:
             requests_list = json.load(f)
     except Exception as e:
-        typer.secho(f"Error reading requests file: {e}", fg=typer.colors.RED, err=True)
+        typer.secho(f"Error: cannot read requests file '{requests_file}': {e}",
+                    fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
     try:

@@ -47,7 +47,7 @@ def init_db():
       • tool_meta
       • messages
       • agent_state
-      • agent_call_stack
+      • agent_call_stack  ← now with parent_role, parent_id
       • conversation_metadata 
     """
     with get_db() as db:
@@ -151,14 +151,16 @@ def init_db():
         );
         """)
 
-        # 7) agent_call_stack
+        # 7) agent_call_stack ← updated with parent pointers
         db.execute("""
         CREATE TABLE IF NOT EXISTS agent_call_stack (
-            repo_url   TEXT    NOT NULL,
-            stack_idx  INTEGER NOT NULL,
-            agent_role TEXT    NOT NULL,
-            agent_id   TEXT    NOT NULL,
-            pushed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            repo_url    TEXT    NOT NULL,
+            stack_idx   INTEGER NOT NULL,
+            agent_role  TEXT    NOT NULL,
+            agent_id    TEXT    NOT NULL,
+            parent_role TEXT,               -- new
+            parent_id   TEXT,               -- new
+            pushed_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY(repo_url,stack_idx)
         );
         """)

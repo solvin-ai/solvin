@@ -2,14 +2,11 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Any
-import hashlib
 
-from .run_to_completion import run_to_completion as tools_run_to_completion
-
+from modules.run_to_completion import run_to_completion as tools_run_to_completion
 from shared.logger import logger
 from shared.config import config
-
-from .agents_running import seed_agent, set_current_agent
+from modules.agents_running import seed_agent, set_current_agent
 
 # ----------------------------------------------------------------
 # Thread‐pool for all run_agent_task calls
@@ -29,26 +26,30 @@ def _worker(
     repo_name:    Optional[str],
 ) -> Dict[str, Any]:
     """
-    1) Determine an agent_id (reuse provided one or derive from prompt or let DB assign).
-    2) Seed (or re‐use) that agent and set it current.
-    3) If this was just a seed (no prompt), return immediately.
+    1) Seed (or re‐use) an agent:
+       - If agent_role == "root", always use ID "001".
+       - Otherwise, derive/use agent_id or user_prompt.
+    2) Mark that agent current.
+    3) If no user_prompt was provided, return immediately.
     4) Otherwise, drive the run_to_completion loop.
     """
-    # 1) pick or derive an ID
-    if agent_id:
-        chosen_id = agent_id
+    # 1) seed or reuse; special‐case "root"
+    if agent_role == "root":
+        local_agent_id = seed_agent(
+            agent_role=agent_role,
+            repo_url=repo_url,
+            agent_id="001",
+            user_prompt=None,
+        )
     else:
-        if user_prompt:
-            # short stable hash → 8‐char hex
-            m = hashlib.md5(user_prompt.encode("utf-8")).hexdigest()
-            chosen_id = m[:8]
-        else:
-            chosen_id = None
+        local_agent_id = seed_agent(
+            agent_role=agent_role,
+            repo_url=repo_url,
+            agent_id=agent_id,
+            user_prompt=user_prompt,
+        )
 
-    # 2) seed or reuse; seed_agent also calls set_current_agent_tuple internally
-    local_agent_id = seed_agent(agent_role, repo_url, agent_id=chosen_id)
-
-    # 2b) ensure request‐context is set
+    # 2) ensure request‐context is set
     set_current_agent(agent_role, local_agent_id, repo_url)
 
     # 3) if caller only wanted to seed (no prompt), return now
@@ -67,10 +68,9 @@ def _worker(
             repo_url=repo_url,
             repo_owner=repo_owner,
             repo_name=repo_name,
-            user_prompt=user_prompt or "",
+            user_prompt=user_prompt,
         )
     except Exception as e:
-        # unexpected exception from the tools service
         logger.error("run_to_completion exception", exc_info=True)
         return {
             "success": False,

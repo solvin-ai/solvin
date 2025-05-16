@@ -16,3 +16,5 @@ export COMPOSE_BAKE=true ; docker compose down ; docker compose up --build -d ; 
 
 # docker system prune -af
 # docker compose exec configs sh
+
+❯ solvin tools execute echo https://github.com/solvin-ai/demo --input-args '{"input_text": "hello"}' --repo-owner solvin-ai
