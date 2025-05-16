@@ -14,15 +14,17 @@ from modules.tools_registry import get_global_registry
 async def run_responder():
     """
     Durable PUSH‐consumer: for each JS‐request message,
-    execute the tool, publish to that message’s reply_to inbox,
+    offload the blocking execute_tool(...) into a thread,
+    publish to that message’s reply_to inbox,
     then ACK the request so it’s removed from JetStream.
     """
     js        = await get_jetstream()
     req_sub   = config["NATS_SUBJECT_EXEC_REQ"]    # e.g. "tools.execute.request"
     resp_pref = config["NATS_SUBJECT_EXEC_RESP"]   # e.g. "tools.execute.response"
+    durable   = config.get("NATS_CONSUMER_NAME", "TOOLS_EXEC_REQ")
 
     async def _message_handler(msg):
-        # grab sequence if present
+        # grab the stream sequence for logging
         seq = None
         try:
             seq = msg.metadata.stream_seq
@@ -32,23 +34,25 @@ async def run_responder():
         logger.debug("⇨ [responder] got request #%s: %r", seq, msg.data)
 
         try:
+            # 1) parse and extract fields
             payload   = json.loads(msg.data.decode())
-            tool_name = payload["tool_name"]
-            # remove it so execute_tool() doesn’t choke
+            tool_name = payload.get("tool_name")
             reply_to  = payload.pop("reply_to", resp_pref)
 
-            # build exactly the args execute_tool expects
             exec_args = {
                 "tool_name":  tool_name,
                 "input_args": payload.get("input_args", {}),
-                "repo_url":   payload.get("repo_url"),    # ← added
+                "repo_url":   payload.get("repo_url"),
                 "repo_name":  payload.get("repo_name"),
                 "repo_owner": payload.get("repo_owner"),
-                "metadata":   payload.get("metadata"),
+                "metadata":   payload.get("metadata", {}),
                 "turn_id":    payload.get("turn_id"),
             }
 
+            # 2) time the execution
             start = time.perf_counter()
+
+            # 3) invoke the tool off the event loop
             if tool_name not in get_global_registry():
                 envelope = {
                     "status": "error",
@@ -59,7 +63,8 @@ async def run_responder():
                 }
             else:
                 try:
-                    envelope = execute_tool(**exec_args)
+                    result = await asyncio.to_thread(execute_tool, **exec_args)
+                    envelope = result
                 except Exception as ex:
                     logger.exception("Error executing tool %s", tool_name)
                     envelope = {
@@ -69,16 +74,20 @@ async def run_responder():
                             "message": str(ex)
                         }
                     }
-            envelope["meta"] = {"exec_time": time.perf_counter() - start}
 
-            # publish the one‐to‐one reply
+            # 4) attach execution time metadata
+            envelope.setdefault("meta", {})
+            envelope["meta"]["exec_time"] = time.perf_counter() - start
+
+            # 5) publish the response
             await js.publish(reply_to, json.dumps(envelope).encode())
             logger.debug("⇨ [responder] published response on %s", reply_to)
 
         except Exception:
             logger.exception("❌ unexpected error in message handler")
+
         finally:
-            # ack _every_ message so it doesn’t stay “in‐flight”
+            # 6) ACK the original request so it's removed from the stream
             try:
                 await msg.ack()
                 logger.debug("⇨ [responder] acked request #%s", seq)
@@ -86,13 +95,14 @@ async def run_responder():
                 logger.exception("❌ failed to ack request #%s", seq)
 
 
-    # subscribe once; JS will invoke _message_handler() for each message
+    # subscribe with an async callback
     await js.subscribe(
         req_sub,
-        durable="TOOLS_EXEC_REQ",
-        cb=_message_handler
+        durable=durable,
+        cb=_message_handler,
+        ack_wait=config.get("NATS_ACK_WAIT", 30_000_000_000)  # 30s in nanoseconds
     )
-    logger.info("Responder listening on %s", req_sub)
+    logger.info("Responder listening on %s (durable=%s)", req_sub, durable)
 
-    # keep the task alive
+    # keep the coroutine alive forever
     await asyncio.Event().wait()
