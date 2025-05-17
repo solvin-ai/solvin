@@ -29,6 +29,7 @@ Intended for use as an OpenAI function-call tool.
 """
 
 import requests
+from requests.exceptions import HTTPError
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from shared.logger import logger
@@ -55,17 +56,31 @@ def is_public_repo(owner: str, repo: str, api_url_github: str) -> bool:
     Determine whether the specified repository is public.
     Makes a GET request to the repository's API URL and inspects the 'private'
     field. Returns True if the repository is public (i.e. "private": false),
-    and False otherwise. In case of an error the function logs the error
-    and defaults to False (treating the repository as private so that a token is used).
+    and False otherwise. A 404 response is treated as 'private' (no error).
     """
     details_url = f"{api_url_github.rstrip('/')}/repos/{owner}/{repo}"
     try:
         response = requests.get(details_url)
+        if response.status_code == 404:
+            logger.info(
+                "Repository %s/%s not found (404); treating as private.",
+                owner, repo
+            )
+            return False
         response.raise_for_status()
         data = response.json()
         return data.get("private", True) is False
+    except HTTPError as e:
+        logger.error(
+            "HTTP error checking if repository %s/%s is public: %s",
+            owner, repo, e
+        )
+        return False
     except Exception as e:
-        logger.error("Error checking if repository %s/%s is public: %s", owner, repo, e)
+        logger.error(
+            "Error checking if repository %s/%s is public: %s",
+            owner, repo, e
+        )
         return False
 
 

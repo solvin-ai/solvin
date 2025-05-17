@@ -14,7 +14,9 @@ from fastapi import HTTPException
 from shared.logger import logger
 from shared.config import config
 
-from modules.agents_running import set_current_agent_tuple as set_current_agent
+# switched to the thread-local setter to avoid the old circular import
+from modules.agents_running import set_thread_current_agent_tuple as set_current_agent
+
 from modules.turns_list import (
     get_turns_list,
     add_turn_to_list,
@@ -40,7 +42,7 @@ def _run_to_completion_worker(
 ) -> dict:
     start_time = time.time()
 
-    # 1) set current-agent context
+    # 1) set current-agent context (thread-local only)
     set_current_agent(agent_role, agent_id, repo_url)
 
     # 2) load (or create) history
@@ -48,10 +50,14 @@ def _run_to_completion_worker(
 
     # 2a) if the last turn was an accepted set_work_completed, reset history
     if history:
-        last     = history[-1]
-        tm       = last.turn_meta.get("tool_meta", {})
-        tool_raw = last.messages.get("tool", {}).get("raw", {})
-        if tool_raw.get("name") == "set_work_completed" and tm.get("rejection") is None:
+        last       = history[-1]
+        # pull the real tool_meta off the UnifiedTurn
+        real_tm    = getattr(last, "tool_meta", last.turn_meta.get("tool_meta", {}))
+        tool_raw   = last.messages.get("tool", {}).get("raw", {})
+        raw_name   = tool_raw.get("name") or real_tm.get("tool_name", "")
+        # strip any “tool_” prefix
+        tool_name  = raw_name[len("tool_"):] if raw_name.startswith("tool_") else raw_name
+        if tool_name == "set_work_completed" and real_tm.get("rejection") is None:
             logger.info(
                 "run_to_completion: detected prior successful set_work_completed; resetting history"
             )
@@ -173,7 +179,7 @@ def _run_to_completion_worker(
             turn_next += 1
             continue
 
-        # 8b) do one LLM+tool turn, passing model, repo_owner/repo_name and reasoning_effort through
+        # 8b) do one LLM+tool turn
         turn_next = run_single_turn(
             agent_role=agent_role,
             agent_id=agent_id,
@@ -186,13 +192,21 @@ def _run_to_completion_worker(
         )
 
         # 8c) only stop when we see an accepted set_work_completed call
-        history   = get_turns_list(agent_role, agent_id, repo_url)
-        last      = history[-1]
-        tm        = last.turn_meta.get("tool_meta", {})
-        tool_raw  = last.messages.get("tool", {}).get("raw", {})
+        history = get_turns_list(agent_role, agent_id, repo_url)
+        last    = history[-1]
 
-        tool_name = tool_raw.get("name") or tm.get("name", "")
-        rejected  = tm.get("rejection")
+        # pull the real tool_meta off the UnifiedTurn
+        real_tm  = getattr(last, "tool_meta", last.turn_meta.get("tool_meta", {}))
+        tool_raw = last.messages.get("tool", {}).get("raw", {})
+
+        logger.debug("LAST TURN tool_raw = %r", tool_raw)
+        logger.debug("LAST TURN tool_meta = %r", real_tm)
+
+        raw_name  = tool_raw.get("name") or real_tm.get("tool_name", "")
+        rejected  = real_tm.get("rejection")
+
+        # normalize off any leading "tool_"
+        tool_name = raw_name[len("tool_"):] if raw_name.startswith("tool_") else raw_name
 
         if tool_name == "set_work_completed" and rejected is None:
             status   = "success"

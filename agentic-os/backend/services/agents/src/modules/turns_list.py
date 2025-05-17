@@ -3,7 +3,7 @@
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from modules.db_turns    import (
+from modules.db_turns import (
     load_turns                as _load_turns,
     save_turns                as _save_turns,
     delete_turns              as _delete_turns,
@@ -11,10 +11,9 @@ from modules.db_turns    import (
     load_conversation_metadata,
     save_conversation_metadata,
 )
-from modules.db_state    import load_state, save_state
-from modules.prompts     import initialize_initial_turn_history
+from modules.db_state import load_state, save_state
 from modules.unified_turn import UnifiedTurn
-from shared.logger        import logger
+from shared.logger import logger
 
 # new import for tool → metadata filters
 from modules.turns_metadata_filters import apply_tool_filters
@@ -43,6 +42,8 @@ class TurnHistory:
 
         # 2) if no history at all, seed turn-0 (else do nothing)
         if not self.turns:
+            # lazy import to avoid circular dependency
+            from modules.prompts import initialize_initial_turn_history
             initialize_initial_turn_history(
                 self.turns, agent_role, agent_id, repo_url
             )
@@ -90,7 +91,6 @@ class TurnHistory:
             self.agent_id,
             self.turns
         )
-        # persist conversation‐level metadata
         save_conversation_metadata(
             self.repo_url,
             self.agent_role,
@@ -104,9 +104,8 @@ class TurnHistory:
           1) assign a monotonic turn ID
           2) append to in‐memory list
           3) persist to SQLite
-          4) update agent_state
-          5) apply tool filters → update metadata
-          6) persist metadata
+          4) apply tool filters → update metadata
+          5) persist state & metadata
         """
         # 1) determine next turn ID
         last_idx, _ = load_state(
@@ -216,15 +215,15 @@ class TurnHistory:
         return self.metadata
 
     def set_metadata(self, metadata: Dict[str, Any]) -> None:
-        """Replace the metadata dict wholesale."""
+        """Replace the metadata dict wholesale (in-memory only)."""
         self.metadata = metadata
 
     def update_metadata(self, key: str, value: Any) -> None:
-        """Set one key/value in the metadata."""
+        """Set one key/value in the metadata (in-memory only)."""
         self.metadata[key] = value
 
     def clear_metadata(self) -> None:
-        """Remove all metadata entries."""
+        """Remove all metadata entries (in-memory only)."""
         self.metadata.clear()
 
 
@@ -309,7 +308,6 @@ def get_turns_metadata(
     Return the metadata dict for this conversation.
     """
     if not (agent_role and agent_id and repo_url):
-        # defer import to avoid circular dependency
         from modules.agents_running import get_current_agent_tuple as get_current_agent
         agent_role, agent_id, repo_url = get_current_agent()
     return TurnHistory.get(agent_role, agent_id, repo_url).get_metadata()
@@ -322,9 +320,11 @@ def set_turns_metadata(
     metadata:   Dict[str, Any]
 ) -> None:
     """
-    Overwrite the entire metadata dict for this conversation.
+    Overwrite the entire metadata dict for this conversation and persist it.
     """
-    TurnHistory.get(agent_role, agent_id, repo_url).set_metadata(metadata)
+    hist = TurnHistory.get(agent_role, agent_id, repo_url)
+    hist.set_metadata(metadata)
+    save_conversation_metadata(repo_url, agent_role, agent_id, hist.metadata)
 
 
 def update_turns_metadata(
@@ -335,9 +335,11 @@ def update_turns_metadata(
     value:      Any
 ) -> None:
     """
-    Set one metadata key/value on this conversation.
+    Set one metadata key/value on this conversation and persist it.
     """
-    TurnHistory.get(agent_role, agent_id, repo_url).update_metadata(key, value)
+    hist = TurnHistory.get(agent_role, agent_id, repo_url)
+    hist.update_metadata(key, value)
+    save_conversation_metadata(repo_url, agent_role, agent_id, hist.metadata)
 
 
 def clear_turns_metadata(
@@ -346,9 +348,10 @@ def clear_turns_metadata(
     repo_url:   str
 ) -> None:
     """
-    Remove all metadata from this conversation (in‐memory only).
+    Remove all metadata from this conversation (in-memory only).
     """
-    TurnHistory.get(agent_role, agent_id, repo_url).clear_metadata()
+    hist = TurnHistory.get(agent_role, agent_id, repo_url)
+    hist.clear_metadata()
 
 
 def clear_turns_for_agent(

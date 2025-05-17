@@ -32,7 +32,12 @@ def tool_read_file(file_path: str) -> dict:
         dict: A dictionary with "success" (bool) and "output" containing the file content
               or an error message.
     """
-    repo = config["REPO_NAME"]
+    repo = config.get("REPO_NAME")
+    if not repo:
+        err = "REPO_NAME is not set in config."
+        logger.error(f"[tool_read_file] {err}")
+        return {"success": False, "output": mask_output(err)}
+
     repo_root = get_repo_path(repo)
 
     logger.debug(
@@ -43,11 +48,11 @@ def tool_read_file(file_path: str) -> dict:
     try:
         # Resolve and sandbox the target path
         safe_file_path = resolve_repo_path(repo, file_path)
-        # (resolve_repo_path already enforces allowed_root, but we double-check)
+        # Double-check that it's under the repo root
         safe_file_path = check_path(safe_file_path, allowed_root=repo_root)
         logger.debug(f"[tool_read_file] Resolved safe_file_path: '{safe_file_path}'")
     except Exception as e:
-        error_msg = f"Error resolving file path '{file_path}': {str(e)}"
+        error_msg = f"Error resolving file path '{file_path}': {e}"
         logger.error(f"[tool_read_file] {error_msg}, cwd: '{os.getcwd()}'")
         return {"success": False, "output": mask_output(error_msg)}
 
@@ -66,16 +71,20 @@ def tool_read_file(file_path: str) -> dict:
                 "status": "error",
                 "message": (
                     f"Cannot decode file '{mask_output(safe_file_path)}' "
-                    f"with encoding '{ENCODING}': {str(ude)}"
+                    f"with encoding '{ENCODING}': {ude}"
                 )
             })
         except Exception as e:
             output = json.dumps({
                 "status": "error",
-                "message": f"An error occurred while reading '{mask_output(safe_file_path)}': {str(e)}"
+                "message": (
+                    f"An error occurred while reading "
+                    f"'{mask_output(safe_file_path)}': {e}"
+                )
             })
 
     return {"success": True, "output": output}
+
 
 def get_tool():
     """
@@ -91,7 +100,7 @@ def get_tool():
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "A relative path (to the repository root) or absolute path to the file."
+                        "description": "A relative path (from the repository root) to the file."
                     }
                 },
                 "required": ["file_path"],

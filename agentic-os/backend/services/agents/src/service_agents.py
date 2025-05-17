@@ -16,7 +16,7 @@ from requests.exceptions import ReadTimeout, ConnectionError as ReqConnectionErr
 from modules.db import init_db
 from modules.run_agent_task import run_agent_task
 from modules.tasks import fetch_task_prompt
-from modules.agents_running import seed_agent  # <-- import seed_agent
+from modules.agents_running import seed_agent
 
 # -------------------------------------------------------------------
 # Tool registry cache (starts on startup, refreshes periodically)
@@ -109,15 +109,16 @@ def _process_repo(
     """
     Background thread entrypoint: runs the 'root' agent through to completion,
     then calls the GitHub complete endpoint if successful. When done, clears
-    CLAIMED_REPO_META so /ready and /status will reflect no active claim.
+    CLAIMED_REPO_META so /ready and /status reflect no active claim.
     """
     global _PROCESSING_THREAD
     try:
+        # Reuse the explicit root_id when invoking the root agent
         result = run_agent_task(
             agent_role="root",
             repo_url=repo_url,
             user_prompt=user_prompt,
-            agent_id=agent_id,
+            agent_id=agent_id,      # reuse the seeded root agent ID
             repo_owner=repo_owner,
             repo_name=repo_name,
         )
@@ -216,13 +217,12 @@ def _claim_repo_loop():
             logger.info(f"Seeding root agent with TASK_NAME={task_name!r}")
 
             # ----------------------------------------------------------------
-            # SEED ROOT AGENT directly (no run_agent_task), passing TASK_NAME
+            # SEED ROOT AGENT directly (no run_agent_task), with explicit ID
             # ----------------------------------------------------------------
             root_id = seed_agent(
                 agent_role="root",
                 repo_url=repo_url,
-                agent_id="001",
-                user_prompt=task_name,
+                agent_id="001",        # explicit ID for the root agent
             )
             logger.info(f"Seeded root agent id {root_id!r} for {repo_url!r}")
 

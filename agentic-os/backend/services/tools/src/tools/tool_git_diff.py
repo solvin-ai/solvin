@@ -15,80 +15,80 @@ from modules.tools_safety import resolve_repo_path, check_path, mask_output
 
 
 def tool_git_diff(file_paths: list) -> dict:
-    # Ensure we know which repo to operate on
+    """
+    Args:
+        file_paths (list of str): Relative or absolute paths to diff, at least one must be provided.
+    Returns:
+        dict: { "success": bool, "output": { "<file>": "<diff or error>" } }
+    """
     repo_name = config.get("REPO_NAME")
     if not repo_name:
-        raise RuntimeError("REPO_NAME must be set in config.")
-    # This both constructs and validates the repo root
-    repo_root = resolve_repo_path(repo_name, ".")
+        err = "REPO_NAME must be set in config."
+        logger.error(f"[tool_git_diff] {err}")
+        return {"success": False, "output": mask_output(err)}
 
+    # Resolve repo root ('.') under the named repo
     try:
-        if not file_paths:
-            raise ValueError("At least one file must be provided for diff.")
-
-        diff_results = {}
-        overall_success = True
-
-        for file_path in file_paths:
-            # Normalize to absolute before checking
-            candidate = os.path.abspath(file_path)
-            logger.debug(
-                f"[tool_git_diff] Before check_path for file_path='{file_path}'. "
-                f"Candidate='{candidate}', cwd='{os.getcwd()}'"
-            )
-
-            # This will realpath() and assert the path is under repo_root
-            safe_file_path = check_path(candidate, allowed_root=repo_root)
-            logger.debug(
-                f"[tool_git_diff] After check_path for file_path='{file_path}'. "
-                f"safe_file_path='{safe_file_path}', cwd='{os.getcwd()}'"
-            )
-
-            # Reject anything outside the repo
-            if not safe_file_path.startswith(repo_root + os.sep) and safe_file_path != repo_root:
-                safe_key = mask_output(safe_file_path)
-                diff_results[safe_key] = "File is not within the current repository."
-                overall_success = False
-                continue
-
-            # Compute git‐relative path and scrub it for keys
-            relative_path = os.path.relpath(safe_file_path, repo_root)
-            safe_key = mask_output(relative_path)
-
-            # Check that it's tracked by git
-            cmd_ls = ["git", "ls-files", "--error-unmatch", relative_path]
-            proc_ls = subprocess.run(cmd_ls, capture_output=True, text=True, cwd=repo_root)
-            if proc_ls.returncode != 0:
-                diff_results[safe_key] = "File is not tracked in the git repository. Diff rejected."
-                overall_success = False
-                continue
-
-            # Finally, run git diff, ignoring volatile date lines
-            cmd_diff = [
-                "git",
-                "-C",
-                repo_root,
-                "diff",
-                "-I",
-                r'date = "[^"]*"',
-                "HEAD",
-                "--",
-                relative_path,
-            ]
-            proc_diff = subprocess.run(cmd_diff, capture_output=True, text=True)
-            if proc_diff.returncode != 0:
-                err = proc_diff.stderr.strip() or "<no stderr>"
-                diff_results[safe_key] = "git diff failed: " + mask_output(err)
-                overall_success = False
-            else:
-                out = proc_diff.stdout.strip()
-                diff_results[safe_key] = mask_output(out) if out else "No differences found."
-
-        return {"success": overall_success, "output": diff_results}
-
+        repo_root = resolve_repo_path(repo_name, ".")
     except Exception as e:
-        logger.error(f"[tool_git_diff] Error: {e}")
-        return {"success": False, "output": mask_output(str(e))}
+        err = f"Error resolving repository root for '{repo_name}': {e}"
+        logger.error(f"[tool_git_diff] {err}")
+        return {"success": False, "output": mask_output(err)}
+
+    if not file_paths:
+        err = "At least one file must be provided for diff."
+        logger.error(f"[tool_git_diff] {err}")
+        return {"success": False, "output": mask_output(err)}
+
+    diff_results = {}
+    overall_success = True
+
+    for path in file_paths:
+        try:
+            # Resolve & sandbox the file path under repo_root
+            safe_path = resolve_repo_path(repo_name, path)
+            safe_path = check_path(safe_path, allowed_root=repo_root)
+            logger.debug(
+                f"[tool_git_diff] Resolved '{path}' → '{safe_path}'"
+            )
+        except Exception as e:
+            key = mask_output(path)
+            diff_results[key] = f"Access denied or invalid path: {e}"
+            overall_success = False
+            continue
+
+        # Compute git‐relative path
+        rel_path = os.path.relpath(safe_path, repo_root)
+        key = mask_output(rel_path)
+
+        # Is it tracked?
+        proc_ls = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", rel_path],
+            cwd=repo_root,
+            capture_output=True, text=True
+        )
+        if proc_ls.returncode != 0:
+            diff_results[key] = "File is not tracked in the git repository. Diff rejected."
+            overall_success = False
+            continue
+
+        # Run git diff, ignore volatile date lines
+        proc_diff = subprocess.run(
+            [
+                "git", "-C", repo_root, "diff",
+                "-I", r'date = "[^"]*"', "HEAD", "--", rel_path
+            ],
+            capture_output=True, text=True
+        )
+        if proc_diff.returncode != 0:
+            err = proc_diff.stderr.strip() or "<no stderr>"
+            diff_results[key] = "git diff failed: " + mask_output(err)
+            overall_success = False
+        else:
+            out = proc_diff.stdout.strip()
+            diff_results[key] = mask_output(out) if out else "No differences found."
+
+    return {"success": overall_success, "output": diff_results}
 
 
 def get_tool():
@@ -98,8 +98,6 @@ def get_tool():
             "name": "tool_git_diff",
             "description": (
                 "Returns git diff output for the specified list of file paths. "
-                "Each provided file is checked to verify that it resides within the current repository. "
-                "Files not tracked are rejected."
             ),
             "parameters": {
                 "type": "object",

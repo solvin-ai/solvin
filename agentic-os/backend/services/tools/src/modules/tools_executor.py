@@ -178,16 +178,17 @@ def execute_tool(
     if success:
         error_msg = ""
     else:
-        # 1) Prefer any explicit "error" field...
-        error_msg = result_json.get("error")
-        # 2) ...but if it's empty, dump the rest of the response for debugging
+        # Prefer explicit 'error', then 'task_result' or 'output'
+        error_msg = (
+            result_json.get("error")
+            or result_json.get("task_result")
+            or result_json.get("output")
+        )
+        # If still empty, dump the full payload minus 'success'
         if not error_msg:
             fallback = dict(result_json)
             fallback.pop("success", None)
-            error_msg = (
-                f"Tool reported failure but did not set an 'error' message. "
-                f"Full response: {pformat(fallback)}"
-            )
+            error_msg = f"No explicit error; full response payload:\n{pformat(fallback)}"
 
     logger.info(
         "Tool '%s' finished in %.3f sec | status=%s | error=%r",

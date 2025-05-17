@@ -42,7 +42,12 @@ def tool_set_work_completed(report: str = None) -> dict:
             except Exception as e:
                 logger.error("Failed to post report to Slack: %s", e)
 
-        return {"success": True, "output": summary}
+        # Return success, summary, and original report
+        return {
+            "success": True,
+            "output": summary,
+            "report": report
+        }
 
     except Exception as e:
         safe_report_path = mask_output(report_file_path)
@@ -55,7 +60,12 @@ def tool_set_work_completed(report: str = None) -> dict:
             except Exception:
                 pass
 
-        return {"success": False, "output": err_message}
+        # Return failure, error message, and original report
+        return {
+            "success": False,
+            "output": err_message,
+            "report": report
+        }
 
 
 def get_tool():

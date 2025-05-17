@@ -17,7 +17,9 @@ def record_spawn(
     parent and child are each (agent_role, agent_id).
     """
     with _lock:
-        _edges.append((parent, child))
+        # only record each edge once
+        if (parent, child) not in _edges:
+            _edges.append((parent, child))
 
 def get_graph_edges() -> List[Tuple[Tuple[str, str], Tuple[str, str]]]:
     """

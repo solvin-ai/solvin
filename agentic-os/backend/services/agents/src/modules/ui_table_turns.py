@@ -103,7 +103,8 @@ def print_turns_table():
         {"header": "Status","justify": "left",  "no_wrap": True},
         {"header": "Args Hash","justify":"left","no_wrap": True},
         {"header": "Secs",   "justify": "left", "no_wrap": True},
-        {"header": "Reason","justify":"left","no_wrap": True},
+        # Allow folding and manual truncation to 80 chars
+        {"header": "Reason","justify":"left","overflow":"fold"},
         {"header": "Purge",  "justify": "left", "no_wrap": True},
         {"header": "Filename / Input Args","justify":"left","overflow":"fold"},
     ]
@@ -190,8 +191,11 @@ def print_turns_table():
         fixed_count=10
     )
 
-    # Add rows with smart truncation on the last column
+    # Add rows with smart truncation on 'Reason' (80 chars) and last column
     for row in rows:
+        # sanitize & truncate 'Reason' (column index 8) to max 80 chars
+        row[8] = smart_truncate_text(sanitize_text(row[8]), 80)
+        # sanitize & truncate dynamic "Filename / Input Args"
         row[-1] = smart_truncate_text(sanitize_text(row[-1]), dynamic_col_width)
         table.add_row(*row)
 

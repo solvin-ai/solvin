@@ -67,10 +67,6 @@ def smart_truncate_text(text, max_width, ellipsis="…"):
     Returns:
       The original text if its length is less than or equal to max_width,
       otherwise a truncated version.
-      
-    Example:
-      smart_truncate_text("Very long filename_example.txt", 15)
-      might yield: "Very…ample.txt"
     """
     if not isinstance(text, str):
         text = str(text)
@@ -113,11 +109,6 @@ def compute_dynamic_column_width(console, fixed_headers, rows, fixed_count, layo
     
     Returns:
       An integer representing the available width (in characters) for the dynamic column.
-      
-    The layout_extra calculation now accounts for:
-     • 2 extra spaces (padding) per column, and
-     • Vertical borders (one extra per column plus one extra on the left)
-     Totaling: (2 * total_columns) + (total_columns + 1) = 3 * total_columns + 1.
     """
     fixed_widths = []
     for i in range(fixed_count):
@@ -149,8 +140,16 @@ def add_rows_with_separator(table, rows, separator_interval=2):
       table              - The Rich Table object.
       rows               - A list of rows (each row is a list of cell values).
       separator_interval - Number of rows after which a separator is added.
+                             If separator_interval ≤ 0, no separators are inserted.
     """
+    # If separator_interval ≤ 0, just dump all rows without separators
+    if separator_interval <= 0:
+        for row in rows:
+            table.add_row(*row)
+        return
+
+    # Otherwise insert a section every N rows
     for index, row in enumerate(rows, start=1):
         table.add_row(*row)
-        if index % separator_interval == 0 and index < len(rows):
+        if index < len(rows) and (index % separator_interval) == 0:
             table.add_section()

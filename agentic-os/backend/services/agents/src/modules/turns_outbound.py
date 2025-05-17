@@ -9,10 +9,13 @@ are sent with the role "tool" (not "function", which is now deprecated).
 
 All history lookups are now scoped by the full
 (agent_role, agent_id, repo_url) quartet.
+
+Deleted turns (tool_meta['deleted']==True) are now skipped entirely,
+except for turn‐0 which is always included.
 """
 
 from modules.unified_turn import UnifiedTurn
-from modules.turns_list  import get_turns_list
+from modules.turns_list   import get_turns_list
 from modules.agents_running import get_current_agent_tuple as get_current_agent
 
 
@@ -23,16 +26,8 @@ def _normalize_raw_message(raw: dict, tool_name: str) -> dict:
     With the updated OpenAI API, tool messages are now represented with the role "tool"
     instead of converting them to "function". This function returns a shallow copy of the raw
     message without modifying its role.
-
-    Parameters:
-      raw (dict): a raw message dictionary from a UnifiedTurn.
-      tool_name (str): the name associated with the tool (or empty string).
-
-    Returns:
-      dict: the normalized message dictionary.
     """
     api_msg = raw.copy()
-    # We do not alter the "role" here; downstream code will see role="tool" if appropriate.
     return api_msg
 
 
@@ -41,28 +36,32 @@ def get_outbound_messages(history: list[UnifiedTurn]) -> list[dict]:
     Flatten a list of UnifiedTurn objects into a list of outbound message
     dictionaries suitable for the OpenAI Chat API.
 
-    For each turn, extract the "raw" sub-dictionary from every message.
-    Tool messages are passed through without modification.
-
-    Parameters:
-      history (list): List of UnifiedTurn objects.
-
-    Returns:
-      list: Outbound message dictionaries.
+    Skips any turn >=1 marked deleted (tool_meta['deleted']==True).
+    Turn‐0 is always included and may contain multiple roles.
     """
     outbound_messages: list[dict] = []
+
     for turn in history:
-        # Extract the tool name from turn_meta if present
+        turn_idx = turn.turn_meta.get("turn", None)
+
+        # skip any non‐zero turn marked deleted
+        if turn_idx is not None and turn_idx != 0 and turn.tool_meta.get("deleted", False):
+            continue
+
+        # extract tool_name for normalization, if available
         tool_name = ""
         if isinstance(turn.tool_meta, dict):
             tool_name = turn.tool_meta.get("tool_name", "")
 
+        # iterate over all roles in this turn
         for msg in turn.messages.values():
             if isinstance(msg, dict) and "raw" in msg:
                 normalized = _normalize_raw_message(msg["raw"], tool_name)
                 outbound_messages.append(normalized)
             else:
+                # in case we stored a pre‐normalized dict
                 outbound_messages.append(msg)
+
     return outbound_messages
 
 
@@ -72,31 +71,25 @@ def build_api_payload() -> dict:
     conversation history into a list of outbound-ready message dictionaries.
 
     Returns:
-      dict: A dictionary with a "messages" key containing the messages.
+      dict: { "messages": [...] }
     """
-    # Determine the current agent from context
+    # Determine the current agent from thread-local context
     role, agent_id, repo_url = get_current_agent()
     if not role:
         raise RuntimeError("No current-agent in context when building API payload")
 
-    # Load the history (turn-0 is guaranteed by get_turns_list)
+    # Load the history
     history = get_turns_list(role, agent_id, repo_url)
 
-    # Flatten into API-ready messages
+    # Flatten into API-ready messages (skipping deleted turns)
     messages = get_outbound_messages(history)
     return {"messages": messages}
 
 
 def convert_unified_turn_to_api_message(unified_turn: UnifiedTurn) -> dict:
     """
-    Convert a single UnifiedTurn object into a dictionary for API debugging,
+    Convert a single UnifiedTurn object into a dict for debugging,
     retaining its turn_meta, tool_meta, and messages.
-
-    Parameters:
-      unified_turn: A UnifiedTurn object.
-
-    Returns:
-      dict: Dictionary representation of the UnifiedTurn.
     """
     return {
         "turn_meta": unified_turn.turn_meta,
@@ -108,7 +101,7 @@ def convert_unified_turn_to_api_message(unified_turn: UnifiedTurn) -> dict:
 if __name__ == "__main__":
     # Demo / smoke test
     import json
-    from modules.agents_running import set_current_agent_tuple as set_current_agent
+    from modules.agents_running import set_thread_current_agent_tuple as set_current_agent
 
     set_current_agent("root", "001", "demo_repo")
 
@@ -116,7 +109,6 @@ if __name__ == "__main__":
     print("Outbound API Payload:")
     print(json.dumps(payload, indent=2))
 
-    # Example usage of convert_unified_turn_to_api_message
     example_turn = get_turns_list("root", "001", "demo_repo")[0]
     api_msg = convert_unified_turn_to_api_message(example_turn)
     print("\nConverted UnifiedTurn:")

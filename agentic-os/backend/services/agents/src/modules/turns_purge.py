@@ -13,7 +13,6 @@ import logging
 from pprint import pformat
 
 from shared.logger import logger
-logger = logger
 from modules.unified_turn import UnifiedTurn, PreservationPolicy
 from modules.turns_utils import get_normalized_file_key, normalize_policy
 
@@ -61,12 +60,18 @@ def schedule_pending_deletion(turn: UnifiedTurn, current_turn: int, deletion_rea
     turn.tool_meta["pending_deletion"] = True
     turn.tool_meta["pending_deletion_turn"] = deletion_turn
     turn.tool_meta["pending_deletion_reason"] = deletion_reason
-    logger.debug("schedule_pending_deletion: Turn %s scheduled for deletion at turn %s. Reason: %s",
-                 turn.turn_meta["turn"], deletion_turn, deletion_reason)
+    logger.debug(
+        "schedule_pending_deletion: Turn %s scheduled for deletion at turn %s. Reason: %s",
+        turn.turn_meta["turn"], deletion_turn, deletion_reason
+    )
 
 def apply_pending_deletions(turns_list, current_turn: int, message_logs=None):
+    """
+    Instead of physically removing turns, mark any turns whose pending_deletion_turn
+    has been reached as deleted, and clear their pending flags.
+    """
     logger.debug("apply_pending_deletions: Entering. Current turn=%s", current_turn)
-    for turn in list(turns_list):
+    for turn in turns_list:
         if is_turn0_message(turn):
             continue
         if get_turn_role(turn) != "tool":
@@ -74,45 +79,24 @@ def apply_pending_deletions(turns_list, current_turn: int, message_logs=None):
         if turn.tool_meta.get("pending_deletion") and (turn.tool_meta.get("pending_deletion_turn") is not None):
             if current_turn >= turn.tool_meta["pending_deletion_turn"]:
                 logger.debug(
-                    "apply_pending_deletions: Deleting turn %s (tool: %s) at turn %s (scheduled turn: %s).",
+                    "apply_pending_deletions: Marking turn %s deleted at turn %s.",
                     turn.turn_meta["turn"],
-                    extract_tool_name(turn),
-                    current_turn,
-                    turn.tool_meta.get("pending_deletion_turn")
+                    current_turn
                 )
-                if not turn.tool_meta.get("being_deleted", False):
-                    turn.tool_meta["being_deleted"] = True
-
-                    # directly remove this turn from history (in-memory + DB)
-                    from modules.turns_list    import remove_turn_from_list
-                    from modules.agents_running import get_current_agent_tuple as get_current_agent
-
-                    agent_role, agent_id, repo_url = get_current_agent()
-                    remove_turn_from_list(
-                        agent_role,
-                        agent_id,
-                        repo_url,
-                        turn.turn_meta["turn"],
-                    )
-
-                    # mark as deleted so all purgers skip it
-                    turn.tool_meta["deleted"] = True
-                    turn.tool_meta["being_deleted"] = False
-
-                if message_logs is not None:
-                    message_logs.append(
-                        f"Turn {turn.turn_meta['turn']} deleted: "
-                        f"{turn.tool_meta.get('pending_deletion_reason')}"
-                    )
-
+                # mark as deleted
+                turn.tool_meta["deleted"] = True
                 # clear pending-deletion flags
                 turn.tool_meta["pending_deletion"] = False
-                turn.tool_meta["pending_deletion_reason"] = None
                 turn.tool_meta["pending_deletion_turn"] = None
-
+                turn.tool_meta["pending_deletion_reason"] = None
+                if message_logs is not None:
+                    message_logs.append(
+                        f"Turn {turn.turn_meta['turn']} marked deleted: "
+                        f"{turn.tool_meta.get('pending_deletion_reason')}"
+                    )
             else:
                 logger.debug(
-                    "apply_pending_deletions: Turn %s is scheduled for deletion at turn %s (current turn: %s).",
+                    "apply_pending_deletions: Turn %s scheduled for deletion at turn %s (current turn: %s).",
                     turn.turn_meta["turn"],
                     turn.tool_meta.get("pending_deletion_turn"),
                     current_turn
@@ -127,11 +111,16 @@ def purge_rejected_messages(turns_list, current_turn: int, message_logs=None):
         if get_turn_role(turn) != "tool":
             continue
         rejection = turn.tool_meta.get("rejection", "")
-        if rejection not in (None, ''):
-            logger.debug("purge_rejected_messages: Scheduling deletion for rejected turn %s.", turn.turn_meta["turn"])
+        if rejection not in (None, ""):
+            logger.debug(
+                "purge_rejected_messages: Scheduling deletion for rejected turn %s.",
+                turn.turn_meta["turn"]
+            )
             schedule_pending_deletion(turn, current_turn, "Rejected turn removed after delay.")
             if message_logs is not None:
-                message_logs.append(f"Scheduled turn {turn.turn_meta['turn']} for deletion (rejected).")
+                message_logs.append(
+                    f"Scheduled turn {turn.turn_meta['turn']} for deletion (rejected)."
+                )
     logger.debug("purge_rejected_messages: Completed processing rejected turns.")
 
 def purge_failed_messages(turns_list, current_turn: int, message_logs=None):
@@ -144,10 +133,15 @@ def purge_failed_messages(turns_list, current_turn: int, message_logs=None):
         tm = getattr(turn, "tool_meta", {})
         status = tm.get("status", "").lower().strip()
         tool_name = extract_tool_name(turn)
-        logger.debug("purge_failed_messages: Checking turn %s; status=%s; tool=%s",
-                     turn.turn_meta.get("turn", "?"), status, tool_name)
+        logger.debug(
+            "purge_failed_messages: Checking turn %s; status=%s; tool=%s",
+            turn.turn_meta.get("turn", "?"), status, tool_name
+        )
         if status == "failure":
-            logger.debug("purge_failed_messages: Scheduling deletion for failure turn %s.", turn.turn_meta.get("turn", "?"))
+            logger.debug(
+                "purge_failed_messages: Scheduling deletion for failure turn %s.",
+                turn.turn_meta.get("turn", "?")
+            )
             schedule_pending_deletion(turn, current_turn, "Failure turn removed after delay.")
             if message_logs is not None:
                 message_logs.append(
@@ -182,7 +176,10 @@ def get_effective_build_turn(turns_list, current_tool, current_turn: int) -> int
             msg_turn = turn.turn_meta["turn"]
             if msg_turn > effective_turn:
                 effective_turn = msg_turn
-                logger.debug("get_effective_build_turn: New effective turn from turn %s = %s.", msg_turn, msg_turn)
+                logger.debug(
+                    "get_effective_build_turn: New effective turn from turn %s = %s.",
+                    msg_turn, msg_turn
+                )
     logger.debug("get_effective_build_turn: Final effective build turn=%s.", effective_turn)
     return effective_turn
 
@@ -203,15 +200,13 @@ def purge_until_update_messages(turns_list, current_turn: int, message_logs=None
             stored_file_id = turn.tool_meta.get("file_id")
             normalized_stored = (
                 os.path.normpath(str(stored_file_id)).lower().strip()
-                if stored_file_id is not None
-                else ""
+                if stored_file_id is not None else ""
             )
             if normalized_stored == normalized_current_file_key:
                 relevant_turns.append(turn)
                 logger.debug(
                     "purge_until_update_messages: Found relevant turn %s for file %s.",
-                    turn.turn_meta["turn"],
-                    normalized_current_file_key
+                    turn.turn_meta["turn"], normalized_current_file_key
                 )
     if len(relevant_turns) < 2:
         logger.debug(

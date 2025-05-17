@@ -18,7 +18,6 @@ from typing import List, Any, Optional
 from shared.config import config
 from shared.logger import logger
 from modules.agents_temp_registry import get_agent_role
-from modules.agents_running import get_current_agent_tuple as get_current_agent
 from modules.unified_turn import UnifiedTurn
 
 
@@ -52,8 +51,9 @@ def initialize_initial_turn_history(
             "turn-0 must only be created once."
         )
 
-    # 1) resolve context‐vars if not provided (now returns 4‐tuple)
+    # 1) resolve context‐vars if not provided (lazy import to avoid circular)
     if not (agent_role and agent_id and repo_url):
+        from modules.agents_running import get_current_agent_tuple as get_current_agent
         agent_role, agent_id, repo_url = get_current_agent()
     if not agent_role:
         raise RuntimeError(

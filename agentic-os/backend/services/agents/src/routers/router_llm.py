@@ -1,12 +1,9 @@
 # routers/router_llm.py
 
 from fastapi import APIRouter, Body, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
-import time
 
-from shared.config import config
-from modules.agents_running import add_running_agent, set_current_agent
 from modules.run_agent_task import run_agent_task
 
 router = APIRouter(
@@ -15,89 +12,66 @@ router = APIRouter(
 )
 
 class RunAgentTaskRequest(BaseModel):
-    agent_role:  str
-    agent_id:    Optional[str] = None
-    repo_url:    Optional[str] = None
-    user_prompt: Optional[str] = ""
+    agent_role:  str           = Field(
+        ..., min_length=1, description="Agent role, e.g. 'SWE'"
+    )
+    repo_url:    str           = Field(
+        ..., min_length=1, description="Repository URL"
+    )
+    user_prompt: str           = Field(
+        ..., min_length=1, description="Non-empty user prompt"
+    )
+    agent_id:    Optional[str] = Field(
+        None,
+        description="Optional explicit agent_id; if omitted, MD5(user_prompt) will be used"
+    )
 
 @router.post("/run_agent_task")
 def llm_run_agent_task(
     payload: RunAgentTaskRequest = Body(...)
 ) -> Dict[str, Any]:
-    # 1) Validate required fields
-    if not payload.agent_role:
-        raise HTTPException(status_code=400, detail="Missing 'agent_role'")
-    repo_url = payload.repo_url or config.get("REPO_URL", "")
-    if not repo_url:
-        raise HTTPException(status_code=400, detail="Missing 'repo_url'")
+    """
+    Full workflow:
+      • user_prompt is required (min_length=1)
+      • agent_id if omitted → MD5(user_prompt) (inside run_agent_task)
+      • seeding & thread-local context happens inside run_agent_task
+    """
+    try:
+        result = run_agent_task(
+            agent_role=payload.agent_role,
+            repo_url=payload.repo_url,
+            user_prompt=payload.user_prompt,
+            agent_id=payload.agent_id,
+        )
+    except ValueError as e:
+        # e.g. empty prompt (shouldn't happen thanks to Pydantic) or
+        # invalid agent_id
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # 2) Allocate or reuse a running-agent ID
-    agent_id = payload.agent_id
-    if not agent_id:
-        raw = add_running_agent(payload.agent_role, repo_url)
-        agent_id = raw.get("agent_id") if isinstance(raw, dict) else raw
-        if not agent_id:
-            raise HTTPException(
-                status_code=500,
-                detail="add_running_agent() did not return an agent_id"
-            )
-
-    # 3) Set the current agent context
-    set_current_agent(payload.agent_role, agent_id, repo_url)
-
-    # 4) Invoke the end-to-end run via our new wrapper
-    start = time.time()
-    result = run_agent_task(
-        agent_role=payload.agent_role,
-        agent_id=agent_id,
-        repo_url=repo_url,
-        user_prompt=payload.user_prompt or ""
-    )
-    total_time = time.time() - start
-    # (you can log total_time if desired)
-
-    # 5) Return wrapped response
-    return {
-        "data":   result,
-        "meta":   None,
-        "errors": []
-    }
+    return {"data": result, "meta": None, "errors": []}
 
 
 class SubmitToLLMRequest(BaseModel):
-    agent_role: str
-    agent_id:   Optional[str] = None
-    repo_url:   Optional[str] = None
+    agent_role: str           = Field(
+        ..., min_length=1, description="Agent role, e.g. 'SWE'"
+    )
+    repo_url:   str           = Field(
+        ..., min_length=1, description="Repository URL"
+    )
+    agent_id:   Optional[str] = Field(
+        None,
+        description="Explicit agent_id if known"
+    )
 
 @router.post("/submit_to_llm")
 def llm_submit_to_llm(
     payload: SubmitToLLMRequest = Body(...)
 ) -> Dict[str, Any]:
-    # 1) Validate required fields
-    if not payload.agent_role:
-        raise HTTPException(status_code=400, detail="Missing 'agent_role'")
-    repo_url = payload.repo_url or config.get("REPO_URL", "")
-    if not repo_url:
-        raise HTTPException(status_code=400, detail="Missing 'repo_url'")
-
-    # 2) Allocate or reuse a running-agent ID
-    agent_id = payload.agent_id
-    if not agent_id:
-        raw = add_running_agent(payload.agent_role, repo_url)
-        agent_id = raw.get("agent_id") if isinstance(raw, dict) else raw
-        if not agent_id:
-            raise HTTPException(
-                status_code=500,
-                detail="add_running_agent() did not return an agent_id"
-            )
-
-    # 3) Set the current agent context
-    set_current_agent(payload.agent_role, agent_id, repo_url)
-
-    # ------------------------------------------------------------------
-    # STUBBED SINGLE TURN
-    # ------------------------------------------------------------------
-    # Return a fake assistant echo for simplicity
+    """
+    Stub for a single-turn LLM call.  Does _not_ seed or set current agent.
+    """
     turn_meta = {"turn": 1}
     tool_meta = {}
     messages  = {"assistant": {"raw": {"content": "echo"}}}

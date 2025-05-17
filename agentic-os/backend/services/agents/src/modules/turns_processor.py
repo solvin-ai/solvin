@@ -32,6 +32,7 @@ from modules.turns_list import add_turn_to_list, get_turns_list
 from modules.unified_turn import UnifiedTurn
 
 from modules.turns_executor import execute_and_wait
+from modules.agents_running import get_current_agent_tuple
 from modules.turns_purge import (                         # ← NEW: import purge routines
     purge_rejected_messages,
     purge_failed_messages,
@@ -345,17 +346,21 @@ def _process_tool_call(
         return unified_turn
 
     # 6) Execute the tool via the background NATS-based executor.
+    #    Inject the current agent_id so we never lose it downstream.
+    _, current_agent_id, _ = get_current_agent_tuple()
+    exec_metadata = {"agent_id": current_agent_id}
+
     logger.debug(
         "Turn %d calling execute_and_wait with args:\n%s",
         turn_number,
         pformat({
             "tool_name":  tool_name,
             "input_args": exec_args,
-            "metadata":   {},
-            "turn_id":    str(turn_number),
+            "metadata":   exec_metadata,
             "repo_owner": repo_owner,
             "repo_name":  repo_name,
             "repo_url":   repo_url,
+            "turn_id":    str(turn_number),
         })
     )
 
@@ -363,6 +368,7 @@ def _process_tool_call(
         result = execute_and_wait(
             tool_name=tool_name,
             input_args=exec_args,
+            metadata=exec_metadata,
             repo_owner=repo_owner,
             repo_name=repo_name,
             repo_url=repo_url,
